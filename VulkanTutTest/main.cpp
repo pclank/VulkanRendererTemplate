@@ -10,6 +10,12 @@
 #include <stdexcept>
 #include <cstdlib>
 #include <vector>
+#include <map>
+#include <optional>
+
+// Macros
+#define REQUIRE_GEOM_SHADERS
+#define RANK_PHYSICAL_DEVICES
 
 // Constants
 const uint32_t WIDTH = 800;
@@ -24,6 +30,25 @@ const bool enableValidationLayers = false;
 #else
 const bool enableValidationLayers = true;
 #endif
+
+// Structs
+struct PhysicalDeviceContainer { 
+    VkPhysicalDevice device;
+    VkPhysicalDeviceProperties properties;
+    VkPhysicalDeviceFeatures features;
+
+    PhysicalDeviceContainer(VkPhysicalDevice dev)
+        : device(dev) {}
+};
+
+struct QueueFamilyIndices {
+    std::optional<uint32_t> graphicsFamily;
+
+    bool IsComplete()
+    {
+        return graphicsFamily.has_value();
+    }
+};
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
@@ -58,6 +83,7 @@ private:
     GLFWwindow* window;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 
     void InitWindow()
     {
@@ -73,6 +99,7 @@ private:
     {
         CreateInstance();
         SetupDebugMessenger();
+        PickPhysicalDevice();
     }
 
     void MainLoop()
@@ -239,6 +266,109 @@ private:
         createInfo.pUserData = nullptr; // Optional
     }
 
+    void PickPhysicalDevice()
+    {
+        uint32_t deviceCount = 0;
+        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+
+        if (deviceCount == 0)
+            throw std::runtime_error("failed to find GPUs with Vulkan support!");
+
+        std::vector<VkPhysicalDevice> devices(deviceCount);
+        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+#ifdef RANK_PHYSICAL_DEVICES
+        std::multimap<int, PhysicalDeviceContainer> candidates;     // Ordered map
+
+        for (const auto& device : devices)
+        {
+            PhysicalDeviceContainer deviceContainer(device);
+            vkGetPhysicalDeviceProperties(device, &deviceContainer.properties);
+            vkGetPhysicalDeviceFeatures(device, &deviceContainer.features);
+
+            int deviceScore = RateDeviceSuitability(deviceContainer);
+            candidates.insert(std::make_pair(deviceScore, deviceContainer));
+        }
+
+        if (candidates.rbegin()->first > 0)
+            physicalDevice = candidates.rbegin()->second.device;
+        else
+            throw std::runtime_error("failed to find a suitable GPU!");
+#else
+        // Check for suitable physical device
+        for (const auto& device : devices)
+        {
+            if (IsDeviceSuitable(device))
+            {
+                physicalDevice = device;
+                break;
+            }
+        }
+#endif // RANK_PHYSICAL_DEVICES
+
+        // If no suitable physical device found
+        if (physicalDevice == VK_NULL_HANDLE)
+            throw std::runtime_error("failed to find a suitable GPU!");
+    }
+
+    bool IsDeviceSuitable(VkPhysicalDevice device)
+    {
+        VkPhysicalDeviceProperties deviceProperties;
+        vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+        VkPhysicalDeviceFeatures deviceFeatures;
+        vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+        QueueFamilyIndices queueIndices = FindQueueFamilies(device);
+
+#ifdef REQUIRE_GEOM_SHADERS
+        return deviceFeatures.geometryShader && (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) && queueIndices.IsComplete();
+#else
+        return (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) && queueIndices.IsComplete();
+#endif // REQUIRE_GEOM_SHADERS
+    }
+
+    int RateDeviceSuitability(PhysicalDeviceContainer device)
+    {
+        int score = 0;
+
+        if (device.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+            score += 1000;
+
+        score += device.properties.limits.maxImageDimension2D;
+
+#ifdef REQUIRE_GEOM_SHADERS
+        if (!device.features.geometryShader)
+            return 0;
+#endif // REQUIRE_GEOM_SHADERS
+
+        return score;
+    }
+
+    QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device)
+    {
+        QueueFamilyIndices indices;
+        
+        uint32_t queueFamilyCount;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+        int i = 0;
+        for (const auto& queueFamily : queueFamilies)
+        {
+            if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+                indices.graphicsFamily = i;
+
+            if (indices.IsComplete())
+                break;
+
+            i++;
+        }
+
+        return indices;
+    }
 };
 
 int main()
