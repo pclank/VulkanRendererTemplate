@@ -10,10 +10,16 @@
 #include <glm/vec4.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
 
 // STB Image loading
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+// Tiny Obj Loader
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
 
 // C++ Libraries
 #include <iostream>
@@ -28,6 +34,7 @@
 #include <fstream>
 #include <array>
 #include <chrono>
+#include <unordered_map>
 
 // Macros
 #define REQUIRE_GEOM_SHADERS
@@ -43,6 +50,9 @@ const uint32_t HEIGHT = 1080;
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 #endif // HIGH_RES
+
+const std::string MODEL_PATH = "models/viking_room.obj";
+const std::string TEXTURE_PATH = "textures/viking_room.png";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -91,6 +101,13 @@ struct Vertex {
     glm::vec3 pos;
     glm::vec3 color;
     glm::vec2 texCoord;
+    glm::vec3 norm;
+
+    bool operator==(const Vertex& other) const
+    {
+        // TODO: Extend!
+        return pos == other.pos && color == other.color && texCoord == other.texCoord && norm == other.norm;
+    }
 
     static VkVertexInputBindingDescription GetBindingDescription()
     {
@@ -102,9 +119,9 @@ struct Vertex {
         return bindingDescription;
     }
 
-    static std::array<VkVertexInputAttributeDescription, 3> GetAttributeDescriptions()
+    static std::array<VkVertexInputAttributeDescription, 4> GetAttributeDescriptions()
     {
-        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+        std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
         attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -120,9 +137,29 @@ struct Vertex {
         attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
         attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
 
+        attributeDescriptions[3].binding = 0;
+        attributeDescriptions[3].location = 3;
+        attributeDescriptions[3].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[3].offset = offsetof(Vertex, norm);
+
         return attributeDescriptions;
     }
 };
+
+// Hash function for Vertex struct
+namespace std
+{
+    template<> struct hash<Vertex>
+    {
+        size_t operator()(Vertex const& vertex) const
+        {
+            return (((hash<glm::vec3>()(vertex.pos) ^
+                (hash<glm::vec3>()(vertex.color) << 1)) >> 1 ^
+                (hash<glm::vec3>()(vertex.norm) << 1)) >> 1) ^
+                (hash<glm::vec2>()(vertex.texCoord) << 1);
+        }
+    };
+}
 
 struct UniformBufferObject {
     glm::mat4 model;
@@ -243,6 +280,8 @@ private:
     VkImage depthImage;
     VkDeviceMemory depthMemory;
     VkImageView depthImageView;
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
 
     void InitWindow()
     {
@@ -280,6 +319,7 @@ private:
         CreateTextureImage();
         CreateTextureImageView();
         CreateTextureSampler();
+        LoadModel();
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
@@ -1270,7 +1310,7 @@ private:
         VkBuffer vertexBuffers[] = { vertexBuffer };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
         VkViewport viewport{};
         viewport.x = 0.0f;
@@ -1566,7 +1606,7 @@ private:
     void CreateTextureImage()
     {
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load("textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
         if (!pixels)
@@ -1866,6 +1906,47 @@ private:
     bool HasStencilComponent(VkFormat format)
     {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
+    }
+
+    void LoadModel()
+    {
+        tinyobj::attrib_t attrib;
+        std::vector<tinyobj::shape_t> shapes;
+        std::vector<tinyobj::material_t> materials;
+        std::string warn, err;
+
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str()))
+            throw std::runtime_error(warn + err);
+
+        std::unordered_map<Vertex, uint32_t> uniqueVertices{};
+
+        // Parse shapes in model
+        for (const auto& shape : shapes)
+        {
+            // Parse indices in shape
+            for (const auto& index : shape.mesh.indices)
+            {
+                Vertex vertex{};
+
+                vertex.pos = { attrib.vertices[index.vertex_index * 3 + 0], attrib.vertices[index.vertex_index * 3 + 1] , attrib.vertices[index.vertex_index * 3 + 2] };
+                vertex.texCoord = { attrib.texcoords[index.texcoord_index * 2 + 0], 1.0f - attrib.texcoords[index.texcoord_index * 2 + 1] };
+                vertex.color = { 1.0f, 1.0f, 1.0f };
+                vertex.norm = { attrib.normals[index.normal_index * 3 + 0], attrib.normals[index.normal_index * 3 + 1], attrib.normals[index.normal_index * 3 + 2] };
+                // TODO: Add the rest!
+
+                if (uniqueVertices.count(vertex) == 0)
+                {
+                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+                    vertices.push_back(vertex);
+                }
+
+                indices.push_back(uniqueVertices[vertex]);
+            }
+
+            std::cout << "Loaded " << shape.name << "!" << std::endl;
+        }
+
+        std::cout << "Load Successful with " << vertices.size() << " vertices, and " << indices.size() << " triangles!" << std::endl;
     }
 };
 
