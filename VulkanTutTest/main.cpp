@@ -36,11 +36,17 @@
 #include <chrono>
 #include <unordered_map>
 
+// Local Libraries
+#include <Camera.hpp>
+#include <Timer.hpp>
+
 // Macros
 #define REQUIRE_GEOM_SHADERS
 #define RANK_PHYSICAL_DEVICES
 #define TEX_SAMPLER_MODE_REPEAT
 #define HIGH_RES
+//#define NO_MSAA
+//#define ENABLE_CAMERA_ANIM
 
 // Constants
 #ifdef HIGH_RES
@@ -225,6 +231,16 @@ static std::vector<char> ReadFile(const std::string& filename)
     return buffer;
 }
 
+// Global objects and stuff
+Camera cam = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
+bool spacebar_down = false;
+Timer timer;
+
+// Callbacks
+void CursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
+void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+void KeyboardCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+
 // Class
 class HelloTriangleApplication {
 public:
@@ -283,6 +299,10 @@ private:
     VkImageView depthImageView;
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
+    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
+    VkImage colorImage;
+    VkDeviceMemory colorImageMemory;
+    VkImageView colorImageView;
 
     void InitWindow()
     {
@@ -294,6 +314,8 @@ private:
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan window", nullptr, nullptr);
         glfwSetWindowUserPointer(window, this);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+
+        glfwSetKeyCallback(window, KeyboardCallback);
     }
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
@@ -315,6 +337,7 @@ private:
         CreateDescriptorSetLayout();
         CreateGraphicsPipeline();
         CreateCommandPools();
+        CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
         CreateTextureImage();
@@ -334,6 +357,8 @@ private:
     {
         while (!glfwWindowShouldClose(window))
         {
+            timer.Tick();
+
             glfwPollEvents();
             DrawFrame();
         }
@@ -396,6 +421,16 @@ private:
         presentInfo.pImageIndices = &imageIndex;
         presentInfo.pResults = nullptr; // Optional
 
+        // Check whether swap chain recreation is required
+        if (image_result == VK_ERROR_OUT_OF_DATE_KHR || image_result == VK_SUBOPTIMAL_KHR || framebufferResized)
+        {
+            framebufferResized = false;
+            RecreateSwapChain();
+            return;
+        }
+        else if (image_result != VK_SUCCESS)
+            throw std::runtime_error("failed to present swap chain image!");
+
         vkQueuePresentKHR(presentQueue, &presentInfo);
 
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -431,9 +466,7 @@ private:
         }
 
         vkDestroyImageView(device, textureImageView, nullptr);
-
         vkDestroySampler(device, textureSampler, nullptr);
-
         vkDestroyImage(device, textureImage, nullptr);
         vkFreeMemory(device, textureImageMemory, nullptr);
 
@@ -458,6 +491,11 @@ private:
 
     void CleanupSwapChain()
     {
+        // Clean up color resources
+        vkDestroyImageView(device, colorImageView, nullptr);
+        vkDestroyImage(device, colorImage, nullptr);
+        vkFreeMemory(device, colorImageMemory, nullptr);
+
         // Clean up depth resources
         vkDestroyImageView(device, depthImageView, nullptr);
         vkDestroyImage(device, depthImage, nullptr);
@@ -487,6 +525,7 @@ private:
 
         CreateSwapChain();
         CreateImageViews();
+        CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
     }
@@ -722,6 +761,17 @@ private:
         if (!device.features.samplerAnisotropy)
             return 0;
 
+#ifndef NO_MSAA
+        VkSampleCountFlagBits msaaSamplesNew = GetMaxUsableSampleCount(device);
+        score += msaaSamples;
+
+        if (msaaSamplesNew > msaaSamples)
+        {
+            msaaSamples = msaaSamplesNew;
+            std::cout << "MSAA " << msaaSamples << "X" << std::endl;
+        }
+#endif // NO_MSAA
+
         return score;
     }
 
@@ -796,6 +846,7 @@ private:
         // Get Device features
         VkPhysicalDeviceFeatures deviceFeatures{};
         deviceFeatures.samplerAnisotropy = VK_TRUE;
+        deviceFeatures.sampleRateShading = VK_TRUE;
 
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1058,9 +1109,9 @@ private:
         // Multisampling
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        multisampling.minSampleShading = 1.0f; // Optional
+        multisampling.sampleShadingEnable = VK_TRUE;
+        multisampling.rasterizationSamples = msaaSamples;
+        multisampling.minSampleShading = 0.2f; // Optional
         multisampling.pSampleMask = nullptr; // Optional
         multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
         multisampling.alphaToOneEnable = VK_FALSE; // Optional
@@ -1156,7 +1207,7 @@ private:
         // Color attachment
         VkAttachmentDescription colorAttachment{};
         colorAttachment.format = swapChainImageFormat;
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachment.samples = msaaSamples;
 
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1165,12 +1216,12 @@ private:
         colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
         colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         // Depth attachment
         VkAttachmentDescription depthAttachment{};
         depthAttachment.format = FindDepthFormat();
-        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachment.samples = msaaSamples;
 
         depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -1180,6 +1231,20 @@ private:
 
         depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        
+        // Color resolve attachments
+        VkAttachmentDescription colorResolveAttachment{};
+        colorResolveAttachment.format = swapChainImageFormat;
+        colorResolveAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+
+        colorResolveAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorResolveAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+        colorResolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorResolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+        colorResolveAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorResolveAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
         // Subpasses
         VkAttachmentReference colorAttachmentRef{};
@@ -1190,13 +1255,18 @@ private:
         depthAttachmentRef.attachment = 1;
         depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+        VkAttachmentReference colorResolveAttachmentRef{};
+        colorResolveAttachmentRef.attachment = 2;
+        colorResolveAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorAttachmentRef;
         subpass.pDepthStencilAttachment = &depthAttachmentRef;
+        subpass.pResolveAttachments = &colorResolveAttachmentRef;
 
-        std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
+        std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorResolveAttachment };
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1226,8 +1296,10 @@ private:
         // Framebuffer for each image view
         for (size_t i = 0; i < swapChainImageViews.size(); i++)
         {
-            std::array<VkImageView, 2> attachments = {
-                swapChainImageViews[i], depthImageView
+            std::array<VkImageView, 3> attachments = {
+                colorImageView,
+                depthImageView,
+                swapChainImageViews[i]
             };
 
             VkFramebufferCreateInfo framebufferInfo{};
@@ -1516,16 +1588,22 @@ private:
 
     void UpdateUniformBuffer(uint32_t currentFrame)
     {
+        UniformBufferObject ubo{};
+#ifdef ENABLE_CAMERA_ANIM
         static auto startTime = std::chrono::high_resolution_clock::now();
 
         auto currentTime = std::chrono::high_resolution_clock::now();
 
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        UniformBufferObject ubo{};
         ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);   // without swapChainExtent we get wrong aspect ratio if resize happens
+#else
+        ubo.model = glm::mat4(1.0f);
+        ubo.proj = cam.GetCurrentProjectionMatrix(swapChainExtent.width, swapChainExtent.height);
+        ubo.view = cam.GetCurrentViewMatrix();
+#endif // ENABLE_CAMERA_ANIM
         ubo.proj[1][1] *= -1;   // Flip sign of scaling factor
 
         memcpy(uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
@@ -1627,7 +1705,7 @@ private:
 
         stbi_image_free(pixels);
 
-        CreateImage(texWidth, texHeight, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
+        CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
 
         TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
@@ -1641,7 +1719,7 @@ private:
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
-    void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
+    void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
     {
         // Image creation
         VkImageCreateInfo imageInfo{};
@@ -1657,7 +1735,7 @@ private:
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         imageInfo.usage = usage;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.samples = numSamples;
         imageInfo.flags = 0; // Optional
 
         if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
@@ -1963,12 +2041,20 @@ private:
     {
         VkFormat depthFormat = FindDepthFormat();
 
-        CreateImage(swapChainExtent.width, swapChainExtent.height, 1, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthMemory);
+        CreateImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthMemory);
 
         depthImageView = CreateImageView(depthImage, 1, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
         // NOT REALLY NEEDED
         TransitionImageLayout(depthImage, 1, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT);
+    }
+
+    void CreateColorResources()
+    {
+        VkFormat colorFormat = swapChainImageFormat;
+
+        CreateImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
+        colorImageView = CreateImageView(colorImage, 1, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
@@ -2041,6 +2127,27 @@ private:
 
         std::cout << "Load Successful with " << vertices.size() << " vertices, and " << indices.size() << " triangles!" << std::endl;
     }
+
+    VkSampleCountFlagBits GetMaxUsableSampleCount(PhysicalDeviceContainer deviceContainer)
+    {
+        VkPhysicalDeviceProperties physicalDeviceProperties;
+        vkGetPhysicalDeviceProperties(deviceContainer.device, &physicalDeviceProperties);
+
+        VkSampleCountFlags maxCount = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+
+        // TODO: Ignore first three options for now (not supported by image formats)!
+        /*if (maxCount & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_64_BIT; }
+        if (maxCount & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_32_BIT; }
+        if (maxCount & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_16_BIT; }*/
+        if (maxCount & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
+        if (maxCount & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
+        if (maxCount & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
+        if (maxCount & VK_SAMPLE_COUNT_8_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
+        if (maxCount & VK_SAMPLE_COUNT_4_BIT) { return VK_SAMPLE_COUNT_4_BIT; }
+        if (maxCount & VK_SAMPLE_COUNT_2_BIT) { return VK_SAMPLE_COUNT_2_BIT; }
+
+        return VK_SAMPLE_COUNT_1_BIT;
+    }
 };
 
 // Driver code
@@ -2059,4 +2166,51 @@ int main()
     }
 
     return EXIT_SUCCESS;
+}
+
+void KeyboardCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    // Timer
+    float time = timer.GetData().DeltaTime;
+
+    // Exit on ESC Key Press
+    if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
+    {
+        glfwSetWindowShouldClose(window, true);
+        // TODO: Clear up!
+    }
+
+    // Enable/Disable Camera
+    if (spacebar_down && glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)
+    {
+        cam.enabled = !cam.enabled;
+
+        // Enable/Disable Cursor
+        if (cam.enabled)
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        else
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+
+        spacebar_down = false;
+    }
+
+    if (!spacebar_down && glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+        spacebar_down = true;
+
+    // Ignore Keyboard Inputs for Camera Movement if arcball_mode == true
+    if (cam.arcball_mode)
+        return;
+
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        cam.MoveCamera(FWD, time);
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        cam.MoveCamera(AFT, time);
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+        cam.MoveCamera(UPWARD, time);
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+        cam.MoveCamera(DOWNWARD, time);
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        cam.MoveCamera(LEFT, time);
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        cam.MoveCamera(RIGHT, time);
 }
