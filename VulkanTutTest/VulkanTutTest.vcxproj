@@ -104,14 +104,14 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glm-1.0.1;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glfw-3.4\include;C:\VulkanSDK\1.3.290.0\Include;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\stb_image;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\tiny_obj;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest\imgui;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest\imgui\backends</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glm-1.0.1;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glfw-3.4\include;C:\VulkanSDK\1.3.290.0\Include;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\stb_image;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\tiny_obj;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest\imgui;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest\imgui\backends;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\assimp\include;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\assimp\build\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.290.0\Lib;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glfw-3.4\lib-vc2022;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glfw-3.4\src;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>%(AdditionalDependencies);glfw3.lib;vulkan-1.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.290.0\Lib;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glfw-3.4\lib-vc2022;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glfw-3.4\src;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\assimp\build\lib\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>%(AdditionalDependencies);glfw3.lib;vulkan-1.lib;assimp-vc143-mtd.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -122,7 +122,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glm-1.0.1;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glfw-3.4\include;C:\VulkanSDK\1.3.290.0\Include;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\stb_image;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\tiny_obj;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest\imgui;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest\imgui\backends</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glm-1.0.1;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glfw-3.4\include;C:\VulkanSDK\1.3.290.0\Include;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\stb_image;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\tiny_obj;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest\imgui;C:\Users\pclan\source\repos\VulkanTutTest\VulkanTutTest\imgui\backends;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\assimp\include;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\assimp\build\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -130,8 +130,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.290.0\Lib;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glfw-3.4\lib-vc2022;</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);glfw3.lib;glfw3.lib;vulkan-1.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.290.0\Lib;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\glfw-3.4\lib-vc2022;C:\Users\pclan\Documents\Visual Studio 2022\Libraries\assimp\build\lib\Release</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);glfw3.lib;vulkan-1.lib;assimp-vc143-mt.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -147,6 +147,90 @@
     <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="assimp-5.4.3\build\include\assimp\config.h" />
+    <ClInclude Include="assimp-5.4.3\build\include\assimp\revision.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\aabb.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\ai_assert.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\anim.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\AssertHandler.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Base64.hpp" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\BaseImporter.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Bitmap.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\BlobIOSystem.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\ByteSwapper.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\camera.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\cexport.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\cfileio.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\cimport.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\ColladaMetaData.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\color4.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\commonMetaData.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Compiler\poppack1.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Compiler\pstdint.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Compiler\pushpack1.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\CreateAnimMesh.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\DefaultIOStream.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\DefaultIOSystem.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\DefaultLogger.hpp" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\defs.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Exceptional.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Exporter.hpp" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\fast_atof.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\GenericProperty.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\GltfMaterial.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Hash.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Importer.hpp" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\importerdesc.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\IOStream.hpp" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\IOStreamBuffer.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\IOSystem.hpp" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\light.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\LineSplitter.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\LogAux.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Logger.hpp" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\LogStream.hpp" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\material.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\MathFunctions.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\matrix3x3.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\matrix4x4.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\MemoryIOWrapper.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\mesh.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\metadata.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\NullLogger.hpp" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\ObjMaterial.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\ParsingUtils.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\pbrmaterial.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\port\AndroidJNI\AndroidJNIIOSystem.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\port\AndroidJNI\BundledAssetIOSystem.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\postprocess.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Profiler.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\ProgressHandler.hpp" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\qnan.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\quaternion.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\RemoveComments.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\scene.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\SceneCombiner.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\SGSpatialSort.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\SkeletonMeshBuilder.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\SmallVector.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\SmoothingGroups.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\SpatialSort.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\StandardShapes.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\StreamReader.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\StreamWriter.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\StringComparison.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\StringUtils.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Subdivision.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\texture.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\TinyFormatter.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\types.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\vector2.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\vector3.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\version.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\Vertex.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\XmlParser.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\XMLTools.h" />
+    <ClInclude Include="assimp-5.4.3\include\assimp\ZipArchiveIOSystem.h" />
     <ClInclude Include="Camera.hpp" />
     <ClInclude Include="imgui\backends\imgui_impl_glfw.h" />
     <ClInclude Include="imgui\backends\imgui_impl_vulkan.h" />
@@ -157,6 +241,16 @@
     <ClInclude Include="imgui\imstb_textedit.h" />
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="Timer.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="assimp-5.4.3\include\assimp\color4.inl" />
+    <None Include="assimp-5.4.3\include\assimp\material.inl" />
+    <None Include="assimp-5.4.3\include\assimp\matrix3x3.inl" />
+    <None Include="assimp-5.4.3\include\assimp\matrix4x4.inl" />
+    <None Include="assimp-5.4.3\include\assimp\quaternion.inl" />
+    <None Include="assimp-5.4.3\include\assimp\SmoothingGroups.inl" />
+    <None Include="assimp-5.4.3\include\assimp\vector2.inl" />
+    <None Include="assimp-5.4.3\include\assimp\vector3.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

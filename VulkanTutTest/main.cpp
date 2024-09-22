@@ -4,6 +4,11 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 
+// ASSIMP
+#include <assimp/Importer.hpp>      // C++ importer interface
+#include <assimp/scene.h>           // Output data structure
+#include <assimp/postprocess.h>     // Post processing flags
+
 // imgui
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -52,6 +57,8 @@
 #define HIGH_RES
 //#define NO_MSAA
 //#define ENABLE_CAMERA_ANIM
+#define MODEL_IMPORT_DEBUG
+#define USE_ASSIMP
 
 // Constants
 #ifdef HIGH_RES
@@ -236,6 +243,26 @@ static std::vector<char> ReadFile(const std::string& filename)
     return buffer;
 }
 
+inline glm::vec3 Assimp2GLMVEC3(aiVector3D& src)
+{
+    glm::vec3 res;
+    res.x = src.x;
+    res.y = src.y;
+    res.z = src.z;
+
+    return res;
+}
+
+inline glm::vec2 Assimp2GLMVEC2(aiVector2D& src)
+{
+    glm::vec2 res;
+    res.x = src.x;
+    res.y = src.y;
+
+    return res;
+}
+
+
 // Global objects and stuff
 Camera cam = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 bool spacebar_down = false;
@@ -252,6 +279,7 @@ public:
     void Run()
     {
         InitWindow();
+        InitImporter();
         InitVulkan();
         InitGUI();
         MainLoop();
@@ -315,6 +343,7 @@ private:
     VkImage colorImage;
     VkDeviceMemory colorImageMemory;
     VkImageView colorImageView;
+    Assimp::Importer importer;
 
     void InitWindow()
     {
@@ -328,6 +357,74 @@ private:
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
         glfwSetKeyCallback(window, KeyboardCallback);
+    }
+
+    void InitImporter(const char* file = MODEL_PATH.c_str())
+    {
+        const aiScene* scene = importer.ReadFile(file,
+            aiProcess_CalcTangentSpace |
+            aiProcess_Triangulate |
+            aiProcess_JoinIdenticalVertices |
+            aiProcess_SortByPType);
+
+        // If the import failed, report it
+        if (nullptr == scene)
+            throw std::runtime_error("model importing failed!");
+    }
+
+    void ImportModel()
+    {
+        const aiScene* scene = importer.GetScene();
+
+        // Logging
+#ifdef MODEL_IMPORT_DEBUG
+        std::cout << "Loading scene " << scene->mName.C_Str() << std::endl;
+        if (scene->HasAnimations())
+            std::cout << "Scene has " << scene->mNumAnimations << " animations!" << std::endl;
+        if (scene->HasMeshes())
+            std::cout << "Scene has " << scene->mNumMeshes << " meshes!" << std::endl;
+        if (scene->hasSkeletons())
+            std::cout << "Scene has " << scene->mNumSkeletons << " skeletons!" << std::endl;
+        if (scene->HasTextures())
+            std::cout << "Scene has " << scene->mNumTextures << " textures!" << std::endl;
+#endif // MODEL_IMPORT_DEBUG
+
+        // Empty scene check
+        if (!scene->HasMeshes())
+            throw std::runtime_error("failed to parse scene: no meshes!");
+
+        // Parse model
+        for (size_t i = 0; i < scene->mNumMeshes; i++)
+        {
+            const aiMesh* mesh = scene->mMeshes[i];
+
+            if (mesh->mNumVertices < 1)
+                throw std::runtime_error("failed to parse mesh: empty vertices!");
+
+            vertices.resize(mesh->mNumVertices);
+            //indices.resize(mesh->mNumFaces);
+
+            // Parse mesh vertices
+            for (size_t j = 0; j < mesh->mNumVertices; j++)
+            {
+                vertices[j].pos = Assimp2GLMVEC3(mesh->mVertices[j]);
+
+                // Parse texCoords (first channel)
+                vertices[j].texCoord = (mesh->mTextureCoords[0]) ? glm::vec2(mesh->mTextureCoords[0][j].x, 1.0f - mesh->mTextureCoords[0][j].y) : glm::vec2(0.0f);
+
+                // Parse normals
+                vertices[j].norm = Assimp2GLMVEC3(mesh->mNormals[j]);
+
+                // TODO: Parse bones!
+            }
+
+            // Parse indices
+            for (size_t j = 0; j < mesh->mNumFaces; j++)
+                for (size_t z = 0; z < mesh->mFaces[j].mNumIndices; z++)
+                    indices.push_back(mesh->mFaces[j].mIndices[z]);
+
+            std::cout << "Loaded mesh " << mesh->mName.C_Str() << " Successfully with " << vertices.size() << " vertices, and " << indices.size() << " triangles!" << std::endl;
+        }
     }
 
     void InitGUI()
@@ -428,7 +525,11 @@ private:
         CreateTextureImage();
         CreateTextureImageView();
         CreateTextureSampler();
+#ifdef USE_ASSIMP
+        ImportModel();
+#else
         LoadModel();
+#endif // USE_ASSIMP
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
