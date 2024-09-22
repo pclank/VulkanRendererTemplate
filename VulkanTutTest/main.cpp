@@ -266,10 +266,15 @@ inline glm::vec2 Assimp2GLMVEC2(aiVector2D& src)
 // Global objects and stuff
 Camera cam = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 bool spacebar_down = false;
+bool first_mouse_flag = true;
+float lastX = 0.0f;
+float lastY = 0.0f;
 Timer timer;
 
 // Callbacks
 void CursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
+void MouseMovementCallback(GLFWwindow* window, double x_pos, double y_pos);
+void MouseScrollCallback(GLFWwindow* window, double x_offset, double y_offset);
 void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 void KeyboardCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
@@ -356,7 +361,11 @@ private:
         glfwSetWindowUserPointer(window, this);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
         glfwSetKeyCallback(window, KeyboardCallback);
+        glfwSetCursorPosCallback(window, MouseMovementCallback);
+        glfwSetScrollCallback(window, MouseScrollCallback);
     }
 
     void InitImporter(const char* file = MODEL_PATH.c_str())
@@ -552,11 +561,15 @@ private:
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
 
-            //ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-            //ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-            //ImGui::End();
+            ImGui::Begin("Your friendly (???) Vulkan render");
+            ImGui::Text("FPS: %.2f", timer.GetData().FPS);
+            ImGui::Separator();
+            ImGui::Text("Campos: %.2f, %.2f, %.2f", cam.position.x, cam.position.y, cam.position.z);
+            ImGui::Checkbox("Arcball mode", &cam.arcball_mode);
+            ImGui::SliderFloat("Camera sensitivity", &cam.look_sensitivity, 0.1f, 5.0f, "%.1f");
+            ImGui::End();
 
-            ImGui::ShowDemoWindow();
+            //ImGui::ShowDemoWindow();
 
             // Rendering
             ImGui::Render();
@@ -2544,4 +2557,35 @@ void KeyboardCallback(GLFWwindow* window, int key, int scancode, int action, int
         cam.MoveCamera(LEFT, time);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         cam.MoveCamera(RIGHT, time);
+}
+
+void MouseMovementCallback(GLFWwindow* window, double x_pos, double y_pos)
+{
+    float xpos = static_cast<float>(x_pos);
+    float ypos = static_cast<float>(y_pos);
+
+    if (first_mouse_flag)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        first_mouse_flag = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos;
+
+    lastX = xpos;
+    lastY = ypos;
+
+    TimeData time = timer.GetData();
+    if (cam.arcball_mode)
+        cam.RotateArcballCamera(xoffset, yoffset, WIDTH, HEIGHT, time.DeltaTime);
+    else
+        cam.RotateCamera(xoffset, yoffset);
+}
+
+void MouseScrollCallback(GLFWwindow* window, double x_offset, double y_offset)
+{
+    TimeData time = timer.GetData();
+    cam.MoveArcballCamera(y_offset, time.DeltaTime);
 }
