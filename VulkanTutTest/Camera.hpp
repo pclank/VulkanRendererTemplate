@@ -24,7 +24,7 @@ const float ARCBALL_MOVE_SENSITIVITY = 0.2f;
 const float FOV = 45.0f;
 const float Z_NEAR = 0.1f;
 const float Z_FAR = 100.0f;
-const glm::vec3 FRONT = glm::vec3(0.0f, 0.0f, -1.0f);
+const glm::vec3 FRONT = glm::vec3(0.0f, 0.0f, 1.0f);
 const glm::vec3 UP = glm::vec3(0.0f, 1.0f, 0.0f);
 
 class Camera {
