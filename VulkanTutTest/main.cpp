@@ -51,6 +51,7 @@
 #include <Timer.hpp>
 #include <Vertex.hpp>
 #include <Model.hpp>
+#include <GUI.hpp>
 
 // Macros
 #define REQUIRE_GEOM_SHADERS
@@ -217,6 +218,7 @@ inline glm::vec2 Assimp2GLMVEC2(aiVector2D& src)
 
 // Global objects and stuff
 Camera cam = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
+GUI gui;
 bool spacebar_down = false;
 bool first_mouse_flag = true;
 float lastX = 0.0f;
@@ -291,10 +293,14 @@ private:
     //std::vector<VkDescriptorSet> descriptorSets;
     std::vector<std::vector<VkDescriptorSet>> descriptorSets;
     uint32_t mipLevels;
-    VkImage textureImage;
+    /*VkImage textureImage;
     VkDeviceMemory textureImageMemory;
     VkImageView textureImageView;
-    VkSampler textureSampler;
+    VkSampler textureSampler;*/
+    std::vector<VkImage> textureImages;
+    std::vector<VkDeviceMemory> textureImageMemories;
+    std::vector<VkImageView> textureImageViews;
+    std::vector<VkSampler> textureSamplers;
     VkImage depthImage;
     VkDeviceMemory depthMemory;
     VkImageView depthImageView;
@@ -501,17 +507,20 @@ private:
         CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
-        CreateTextureImage();
-        CreateTextureImageView();
-        CreateTextureSampler();
 #ifdef USE_ASSIMP
         ImportModel();
+        CreateTextureImage(models.size() - 1);
+        CreateTextureImageView(models.size() - 1);
+        CreateTextureSampler(models.size() - 1);
         CreateVertexBuffer(models.size() - 1);
         CreateIndexBuffer(models.size() - 1);
         CreateUniformBuffers(models.size() - 1);
         CreateDescriptorPool(models.size() - 1);
         CreateDescriptorSets(models.size() - 1);
         ImportModel("models/suzanne.obj");
+        CreateTextureImage(models.size() - 1, "textures/marble.png");
+        CreateTextureImageView(models.size() - 1);
+        CreateTextureSampler(models.size() - 1);
         CreateVertexBuffer(models.size() - 1);
         CreateIndexBuffer(models.size() - 1);
         CreateUniformBuffers(models.size() - 1);
@@ -519,6 +528,9 @@ private:
         CreateDescriptorSets(models.size() - 1);
 #else
         LoadModel();
+        CreateTextureImage();
+        CreateTextureImageView();
+        CreateTextureSampler();
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
@@ -548,11 +560,14 @@ private:
             ImGui::Text("Campos: %.2f, %.2f, %.2f", cam.position.x, cam.position.y, cam.position.z);
             ImGui::Checkbox("Arcball mode", &cam.arcball_mode);
             ImGui::SliderFloat("Camera sensitivity", &cam.look_sensitivity, 0.1f, 5.0f, "%.1f");
+            ImGui::SliderFloat("Camera speed", &cam.movement_speed, 0.1f, 15.0f, "%.1f");
+            ImGui::Separator();
+            ImGui::SliderFloat3("Suzanne translation", gui.test_translation, -10.0f, 10.0f, "%.2f");
+            ImGui::SliderFloat("Suzanne scale", &gui.test_scale, 0.1f, 5.0f, "%.2f");
             ImGui::End();
 
             //ImGui::ShowDemoWindow();
 
-            // Rendering
             ImGui::Render();
 
             DrawFrame();
@@ -671,10 +686,13 @@ private:
             }
         }
 
-        vkDestroyImageView(device, textureImageView, nullptr);
-        vkDestroySampler(device, textureSampler, nullptr);
-        vkDestroyImage(device, textureImage, nullptr);
-        vkFreeMemory(device, textureImageMemory, nullptr);
+        for (size_t i = 0; i < textureImages.size(); i++)
+        {
+            vkDestroyImageView(device, textureImageViews[i], nullptr);
+            vkDestroySampler(device, textureSamplers[i], nullptr);
+            vkDestroyImage(device, textureImages[i], nullptr);
+            vkFreeMemory(device, textureImageMemories[i], nullptr);
+        }
 
         for (size_t i = 0; i < descriptorPools.size(); i++)
             vkDestroyDescriptorPool(device, descriptorPools[i], nullptr);
@@ -1960,7 +1978,9 @@ private:
             auto currentTime = std::chrono::high_resolution_clock::now();
 
             float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-            ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+            ubo.model = glm::scale(glm::mat4(1.0f), glm::vec3(gui.test_scale));
+            ubo.model = glm::translate(ubo.model, glm::vec3(gui.test_translation[0], gui.test_translation[1], gui.test_translation[2]));
+            ubo.model = glm::rotate(ubo.model, time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         }
 
 #endif // ENABLE_CAMERA_ANIM
@@ -2033,9 +2053,9 @@ private:
 
             // Sampler
             VkDescriptorImageInfo imageInfo{};
-            imageInfo.sampler = textureSampler;
+            imageInfo.sampler = textureSamplers[modelIndex];
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = textureImageView;
+            imageInfo.imageView = textureImageViews[modelIndex];
 
             // Update configurations
             std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
@@ -2063,11 +2083,13 @@ private:
         }
     }
 
-    void CreateTextureImage()
+    void CreateTextureImage(const size_t modelIndex, const char* file = TEXTURE_PATH.c_str())
     {
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        stbi_uc* pixels = stbi_load(file, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
+
+        // TODO: Handle for multiple textures!
         mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight))) + 1);
 
         if (!pixels)
@@ -2086,15 +2108,20 @@ private:
 
         stbi_image_free(pixels);
 
-        CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
+        textureImages.resize(textureImages.size() + 1);
+        textureImageMemories.resize(textureImageMemories.size() + 1);
 
-        TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+        CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            textureImages[modelIndex], textureImageMemories[modelIndex]);
 
-        CopyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+        TransitionImageLayout(textureImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        CopyBufferToImage(stagingBuffer, textureImages[modelIndex], static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
         //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
-        GenerateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+        GenerateMipmaps(textureImages[modelIndex], VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
@@ -2358,9 +2385,10 @@ private:
         EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue);
     }
 
-    void CreateTextureImageView()
+    void CreateTextureImageView(const size_t modelIndex)
     {
-        textureImageView = CreateImageView(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+        textureImageViews.resize(textureImageViews.size() + 1);
+        textureImageViews[modelIndex] = CreateImageView(textureImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 
     }
 
@@ -2384,7 +2412,7 @@ private:
         return imageView;
     }
 
-    void CreateTextureSampler()
+    void CreateTextureSampler(const size_t modelIndex)
     {
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -2414,7 +2442,9 @@ private:
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = static_cast<float>(mipLevels);
 
-        if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS)
+        textureSamplers.resize(textureSamplers.size() + 1);
+
+        if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSamplers[modelIndex]) != VK_SUCCESS)
             throw std::runtime_error("failed to create sampler!");
     }
     

@@ -338,6 +338,9 @@
     <ClInclude Include="AnimationClip.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="GUI.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="assimp-5.4.3\include\assimp\color4.inl">

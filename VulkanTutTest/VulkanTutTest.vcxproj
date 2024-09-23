@@ -233,6 +233,7 @@
     <ClInclude Include="assimp-5.4.3\include\assimp\XMLTools.h" />
     <ClInclude Include="assimp-5.4.3\include\assimp\ZipArchiveIOSystem.h" />
     <ClInclude Include="Camera.hpp" />
+    <ClInclude Include="GUI.hpp" />
     <ClInclude Include="imgui\backends\imgui_impl_glfw.h" />
     <ClInclude Include="imgui\backends\imgui_impl_vulkan.h" />
     <ClInclude Include="imgui\imconfig.h" />
