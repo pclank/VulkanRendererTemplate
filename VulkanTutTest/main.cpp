@@ -60,7 +60,7 @@
 //#define NO_MSAA
 //#define ENABLE_CAMERA_ANIM
 #define MODEL_IMPORT_DEBUG
-#define USE_ASSIMP
+#define USE_ASSIMP                  // DO NOT DISABLE!
 
 // Constants
 #ifdef HIGH_RES
@@ -236,7 +236,6 @@ public:
     void Run()
     {
         InitWindow();
-        InitImporter();
         InitVulkan();
         InitGUI();
         MainLoop();
@@ -276,10 +275,10 @@ private:
     std::vector<VkFence> inFlightFences;
     uint32_t currentFrame = 0;
     bool framebufferResized = false;
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
-    VkBuffer indexBuffer;
-    VkDeviceMemory indexBufferMemory;
+    std::vector<VkBuffer> vertexBuffers;
+    std::vector<VkDeviceMemory> vertexBufferMemories;
+    std::vector<VkBuffer> indexBuffers;
+    std::vector<VkDeviceMemory> indexBufferMemories;
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
     std::vector<void*> uniformBuffersMapped;
@@ -296,12 +295,11 @@ private:
     VkImageView depthImageView;
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
-    Model model;
+    std::vector<Model> models;
     VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
     VkImage colorImage;
     VkDeviceMemory colorImageMemory;
     VkImageView colorImageView;
-    Assimp::Importer importer;
 
     void InitWindow()
     {
@@ -321,7 +319,7 @@ private:
         glfwSetScrollCallback(window, MouseScrollCallback);
     }
 
-    void InitImporter(const char* file = MODEL_PATH.c_str())
+    void InitImporter(Assimp::Importer& importer, const char* file = MODEL_PATH.c_str())
     {
         const aiScene* scene = importer.ReadFile(file,
             aiProcess_CalcTangentSpace |
@@ -334,8 +332,11 @@ private:
             throw std::runtime_error("model importing failed!");
     }
 
-    void ImportModel()
+    void ImportModel(const char* file = MODEL_PATH.c_str())
     {
+        Assimp::Importer importer;
+        InitImporter(importer, file);
+
         const aiScene* scene = importer.GetScene();
 
         // Logging
@@ -350,6 +351,8 @@ private:
         if (scene->HasTextures())
             std::cout << "Scene has " << scene->mNumTextures << " textures!" << std::endl;
 #endif // MODEL_IMPORT_DEBUG
+
+        Model model;
 
         // Empty scene check
         if (!scene->HasMeshes())
@@ -394,6 +397,8 @@ private:
 
             std::cout << "Loaded mesh " << mesh->mName.C_Str() << " Successfully with " << model.meshes[i].vertices.size() << " vertices, and " << model.meshes[i].indices.size() << " triangles!" << std::endl;
         }
+
+        models.push_back(model);
     }
 
     void InitGUI()
@@ -496,11 +501,16 @@ private:
         CreateTextureSampler();
 #ifdef USE_ASSIMP
         ImportModel();
+        CreateVertexBuffer(models.size() - 1);
+        CreateIndexBuffer(models.size() - 1);
+        ImportModel("models/suzanne.obj");
+        CreateVertexBuffer(models.size() - 1);
+        CreateIndexBuffer(models.size() - 1);
 #else
         LoadModel();
-#endif // USE_ASSIMP
         CreateVertexBuffer();
         CreateIndexBuffer();
+#endif // USE_ASSIMP
         CreateUniformBuffers();
         CreateDescriptorPool();
         CreateDescriptorSets();
@@ -655,10 +665,14 @@ private:
         vkDestroyDescriptorPool(device, imguiDescriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
         
-        vkDestroyBuffer(device, vertexBuffer, nullptr);
-        vkFreeMemory(device, vertexBufferMemory, nullptr);
-        vkDestroyBuffer(device, indexBuffer, nullptr);
-        vkFreeMemory(device, indexBufferMemory, nullptr);
+        // Clear all vertex and index buffers and memories
+        for (size_t i = 0; i < vertexBuffers.size(); i++)
+        {
+            vkDestroyBuffer(device, vertexBuffers[i], nullptr);
+            vkFreeMemory(device, vertexBufferMemories[i], nullptr);
+            vkDestroyBuffer(device, indexBuffers[i], nullptr);
+            vkFreeMemory(device, indexBufferMemories[i], nullptr);
+        }
 
         vkDestroyDevice(device, nullptr);
 
@@ -1662,28 +1676,31 @@ private:
 
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-        VkBuffer vertexBuffers[] = { vertexBuffer };
-        VkDeviceSize offsets[] = { 0 };
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        for (size_t i = 0; i < models.size(); i++)
+        {
+            VkBuffer vertexBuffersRend[] = { vertexBuffers[i]};
+            VkDeviceSize offsets[] = { 0 };
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersRend, offsets);
+            vkCmdBindIndexBuffer(commandBuffer, indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
 
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapChainExtent.width);
-        viewport.height = static_cast<float>(swapChainExtent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(swapChainExtent.width);
+            viewport.height = static_cast<float>(swapChainExtent.height);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-        VkRect2D scissor{};
-        scissor.offset = { 0, 0 };
-        scissor.extent = swapChainExtent;
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+            VkRect2D scissor{};
+            scissor.offset = { 0, 0 };
+            scissor.extent = swapChainExtent;
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model.meshes[0].indices.size()), 1, 0, 0, 0);
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(models[i].meshes[0].indices.size()), 1, 0, 0, 0);
+        }
 
         // Record dear imgui primitives into command buffer
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
@@ -1749,10 +1766,10 @@ private:
         vkBindBufferMemory(device, buffer, bufferMemory, 0);
     }
 
-    void CreateVertexBuffer()
+    void CreateVertexBuffer(const size_t modelIndex)
     {
 #ifdef USE_ASSIMP
-        VkDeviceSize bufferSize = sizeof(model.meshes[0].vertices[0]) * model.meshes[0].vertices.size();
+        VkDeviceSize bufferSize = sizeof(models[modelIndex].meshes[0].vertices[0]) * models[modelIndex].meshes[0].vertices.size();
 #else
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 #endif // USE_ASSIMP
@@ -1767,25 +1784,29 @@ private:
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
 #ifdef USE_ASSIMP
-        memcpy(data, model.meshes[0].vertices.data(), static_cast<size_t>(bufferSize));
+        memcpy(data, models[modelIndex].meshes[0].vertices.data(), static_cast<size_t>(bufferSize));
 #else
         memcpy(data, vertices.data(), static_cast<size_t>(bufferSize));
 #endif // USE_ASSIMP
         vkUnmapMemory(device, stagingBufferMemory);
 
-        CreateBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            vertexBuffer, vertexBufferMemory);
+        // Resize buffer and memory vectors
+        vertexBuffers.resize(vertexBuffers.size() + 1);
+        vertexBufferMemories.resize(vertexBufferMemories.size() + 1);
 
-        CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+        CreateBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            vertexBuffers[modelIndex], vertexBufferMemories[modelIndex]);
+
+        CopyBuffer(stagingBuffer, vertexBuffers[modelIndex], bufferSize);
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
-    void CreateIndexBuffer()
+    void CreateIndexBuffer(const size_t modelIndex)
     {
 #ifdef USE_ASSIMP
-        VkDeviceSize bufferSize = sizeof(model.meshes[0].indices[0]) * model.meshes[0].indices.size();
+        VkDeviceSize bufferSize = sizeof(models[modelIndex].meshes[0].indices[0]) * models[modelIndex].meshes[0].indices.size();
 #else
         VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 #endif // USE_ASSIMP
@@ -1800,16 +1821,20 @@ private:
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
 #ifdef USE_ASSIMP
-        memcpy(data, model.meshes[0].indices.data(), static_cast<size_t>(bufferSize));
+        memcpy(data, models[modelIndex].meshes[0].indices.data(), static_cast<size_t>(bufferSize));
 #else
         memcpy(data, indices.data(), static_cast<size_t>(bufferSize));
 #endif // USE_ASSIMP
         vkUnmapMemory(device, stagingBufferMemory);
 
-        CreateBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            indexBuffer, indexBufferMemory);
+        // Resize buffer and memory vectors
+        indexBuffers.resize(indexBuffers.size() + 1);
+        indexBufferMemories.resize(indexBufferMemories.size() + 1);
 
-        CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
+        CreateBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            indexBuffers[modelIndex], indexBufferMemories[modelIndex]);
+
+        CopyBuffer(stagingBuffer, indexBuffers[modelIndex], bufferSize);
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
