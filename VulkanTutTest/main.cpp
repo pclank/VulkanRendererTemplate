@@ -20,6 +20,7 @@
 #include <glm/vec4.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
@@ -52,6 +53,7 @@
 #include <Vertex.hpp>
 #include <Model.hpp>
 #include <GUI.hpp>
+#include <AnimationClip.hpp>
 
 // Macros
 #define REQUIRE_GEOM_SHADERS
@@ -199,37 +201,33 @@ static std::vector<char> ReadFile(const std::string& filename)
 
 inline glm::vec3 Assimp2GLMVEC3(aiVector3D& src)
 {
-    glm::vec3 res;
-    res.x = src.x;
-    res.y = src.y;
-    res.z = src.z;
-
-    return res;
+    return glm::vec3(src.x, src.y, src.z);
 }
 
 inline glm::vec2 Assimp2GLMVEC2(aiVector2D& src)
 {
-    glm::vec2 res;
-    res.x = src.x;
-    res.y = src.y;
+    return glm::vec2(src.x, src.y);
+}
 
-    return res;
+inline glm::mat4 AssimpMatrix2GLMMAT4(aiMatrix4x4& src)
+{
+    return glm::transpose(glm::make_mat4(&src.a1));
+}
+
+inline glm::quat Assimp2GLMQUAT(aiQuaternion& src)
+{
+    return glm::quat(src.w, src.x, src.y, src.z);
 }
 
 // Global objects and stuff
 Camera cam = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
-GUI gui;
-bool spacebar_down = false;
-bool first_mouse_flag = true;
-float lastX = 0.0f;
-float lastY = 0.0f;
 Timer timer;
+GUI gui = GUI(&cam, &timer);
 
 // Callbacks
-void CursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
 void MouseMovementCallback(GLFWwindow* window, double x_pos, double y_pos);
 void MouseScrollCallback(GLFWwindow* window, double x_offset, double y_offset);
-void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);             // TODO: Implement!
 void KeyboardCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
 // Class
@@ -350,17 +348,19 @@ private:
 
         const aiScene* scene = importer.GetScene();
 
+        std::cout << "---------------------" << std::endl;
+
         // Logging
 #ifdef MODEL_IMPORT_DEBUG
         std::cout << "Loading scene " << scene->mName.C_Str() << std::endl;
         if (scene->HasAnimations())
-            std::cout << "Scene has " << scene->mNumAnimations << " animations!" << std::endl;
+            std::cout << "Scene has " << scene->mNumAnimations << " animation(s)!" << std::endl;
         if (scene->HasMeshes())
-            std::cout << "Scene has " << scene->mNumMeshes << " meshes!" << std::endl;
+            std::cout << "Scene has " << scene->mNumMeshes << " mesh(es)!" << std::endl;
         if (scene->hasSkeletons())
             std::cout << "Scene has " << scene->mNumSkeletons << " skeletons!" << std::endl;
         if (scene->HasTextures())
-            std::cout << "Scene has " << scene->mNumTextures << " textures!" << std::endl;
+            std::cout << "Scene has " << scene->mNumTextures << " texture(s)!" << std::endl;
 #endif // MODEL_IMPORT_DEBUG
 
         Model model;
@@ -385,7 +385,6 @@ private:
             model.meshes[i].scene = scene;
 
             model.meshes[i].vertices.resize(mesh->mNumVertices);
-            //indices.resize(mesh->mNumFaces);
 
             // Parse mesh vertices
             for (size_t j = 0; j < mesh->mNumVertices; j++)
@@ -398,7 +397,17 @@ private:
                 // Parse normals
                 model.meshes[i].vertices[j].norm = Assimp2GLMVEC3(mesh->mNormals[j]);
 
-                // TODO: Parse bones!
+                // Parse tangents and bitangents
+                if (mesh->HasTangentsAndBitangents())
+                {
+                    model.meshes[i].vertices[j].tangent = Assimp2GLMVEC3(mesh->mTangents[j]);
+                    model.meshes[i].vertices[j].biTangent = Assimp2GLMVEC3(mesh->mBitangents[j]);
+                }
+                else
+                {
+                    model.meshes[i].vertices[j].tangent = glm::vec3(1.0f);
+                    model.meshes[i].vertices[j].biTangent = glm::vec3(1.0f);
+                }
             }
 
             // Parse indices
@@ -406,10 +415,132 @@ private:
                 for (size_t z = 0; z < mesh->mFaces[j].mNumIndices; z++)
                     model.meshes[i].indices.push_back(mesh->mFaces[j].mIndices[z]);
 
+            // Parse bones!
+            ExtractBoneWeightForVertices(vertices, mesh, scene, model);
+
             std::cout << "Loaded mesh " << mesh->mName.C_Str() << " Successfully with " << model.meshes[i].vertices.size() << " vertices, and " << model.meshes[i].indices.size() << " triangles!" << std::endl;
         }
 
+        // Parse animations
+        ParseAnimations(scene, model);
+
         models.push_back(model);
+    }
+
+    void ExtractBoneWeightForVertices(std::vector<Vertex>& vertices, const aiMesh* mesh, const aiScene* scene, Model& model)
+    {
+        auto& boneInfoMap = model.meshes[0].boneMap;
+        int& boneCount = model.meshes[0].boneCounter;
+
+        std::cout << "Found " << mesh->mNumBones << " Bones in Mesh " << mesh->mName.C_Str() << std::endl;
+
+        for (int boneIndex = 0; boneIndex < mesh->mNumBones; boneIndex++)
+        {
+            int boneId = -1;
+            std::string boneName = mesh->mBones[boneIndex]->mName.C_Str();
+            if (boneInfoMap.find(boneName) == boneInfoMap.end())
+            {
+                BoneInfo newBoneInfo;
+                newBoneInfo.id = boneCount;
+                newBoneInfo.offsetMatrix = AssimpMatrix2GLMMAT4(mesh->mBones[boneIndex]->mOffsetMatrix);
+                //boneInfoMap[boneName] = boneCount;
+                boneInfoMap.insert({ boneName, boneCount });
+                model.meshes[0].bones.push_back(newBoneInfo);
+                boneId = boneCount;
+                boneCount++;
+            }
+            else
+            {
+                //boneId = boneInfoMap[boneName];
+                boneId = boneInfoMap.find(boneName)->second;
+            }
+            assert(boneId != -1);
+            auto weights = mesh->mBones[boneIndex]->mWeights;
+            int numWeights = mesh->mBones[boneIndex]->mNumWeights;
+            for (int weightIndex = 0; weightIndex < numWeights; weightIndex++)
+            {
+                int vertexId = weights[weightIndex].mVertexId;
+                float weight = weights[weightIndex].mWeight;
+                assert(vertexId <= vertices.size());
+                SetVertexBoneData(vertices[vertexId], boneId, weight);
+            }
+        }
+    }
+
+    void SetVertexBoneData(Vertex& vertex, int boneId, float weight)
+    {
+        uint32_t bone_number = vertex.bone_num;                     // The array index where the bone will be added
+
+        if (bone_number > 3)
+            throw std::runtime_error("ERROR::Exceeded MAX_BONES!");
+
+        // Add Bone ID and Weight
+        vertex.boneIDs[bone_number] = boneId;
+        vertex.weights[bone_number] = weight;
+
+        // Increment Bone Number in vertex
+        vertex.bone_num++;
+    }
+
+    void ParseAnimations(const aiScene* scene, Model& model)
+    {
+        // Check for animations
+        if (scene->HasAnimations())
+        {
+            uint32_t n_animations = scene->mNumAnimations;
+            std::cout << "Found " << n_animations << " animations in Scene!" << std::endl;
+
+            // Retrieve animations and parse them to AnimationClip objects
+            for (unsigned int i = 0; i < n_animations; i++)
+            {
+                aiAnimation* current_animation = scene->mAnimations[i];
+
+                // TODO: Currently considers same size of all channels (realistic?)
+                // Parse channels
+                int max_frames = 0;
+                std::map<std::string, AnimationPose> poses;
+                for (unsigned int j = 0; j < current_animation->mNumChannels; j++)
+                {
+                    aiNodeAnim* current_channel = current_animation->mChannels[j];
+
+                    std::string channel_bone_name = std::string(current_channel->mNodeName.data);           // Get name of affected node
+
+                    // Check keyframe number
+                    if (current_channel->mNumPositionKeys > max_frames)
+                        max_frames = current_channel->mNumPositionKeys;
+                    if (current_channel->mNumRotationKeys > max_frames)
+                        max_frames = current_channel->mNumRotationKeys;
+                    if (current_channel->mNumScalingKeys > max_frames)
+                        max_frames = current_channel->mNumScalingKeys;
+
+                    // Parse SQTs of channel
+                    std::vector<SQT> sqts;
+                    for (unsigned int k = 0; k < current_channel->mNumPositionKeys; k++)
+                    {
+                        SQT new_sqt;
+                        new_sqt.time = current_channel->mScalingKeys[k].mTime / current_animation->mTicksPerSecond;
+                        new_sqt.scale = Assimp2GLMVEC3(current_channel->mScalingKeys[k].mValue);
+                        new_sqt.translation = Assimp2GLMVEC3(current_channel->mPositionKeys[k].mValue);
+                        new_sqt.rotation = Assimp2GLMQUAT(current_channel->mRotationKeys[k].mValue);
+
+                        sqts.push_back(new_sqt);
+                    }
+
+                    AnimationPose new_pose;
+                    new_pose.bone_name = channel_bone_name;
+                    new_pose.bonePoses = sqts;
+
+                    // Add AnimationPose to map
+                    poses.insert({ channel_bone_name, new_pose });
+                }
+
+                AnimationClip new_animation_clip = AnimationClip(std::string(current_animation->mName.data), model.meshes[0].bones.size(),
+                    max_frames, current_animation->mDuration / current_animation->mTicksPerSecond, current_animation->mTicksPerSecond, poses);
+                model.meshes[0].animations.push_back(new_animation_clip);
+            }
+        }
+        else
+            std::cout << "No animations found!" << std::endl;
     }
 
     void InitGUI()
@@ -549,26 +680,7 @@ private:
 
             glfwPollEvents();
 
-            // Start the Dear ImGui frame
-            ImGui_ImplVulkan_NewFrame();
-            ImGui_ImplGlfw_NewFrame();
-            ImGui::NewFrame();
-
-            ImGui::Begin("Your friendly (???) Vulkan render");
-            ImGui::Text("FPS: %.2f", timer.GetData().FPS);
-            ImGui::Separator();
-            ImGui::Text("Campos: %.2f, %.2f, %.2f", cam.position.x, cam.position.y, cam.position.z);
-            ImGui::Checkbox("Arcball mode", &cam.arcball_mode);
-            ImGui::SliderFloat("Camera sensitivity", &cam.look_sensitivity, 0.1f, 5.0f, "%.1f");
-            ImGui::SliderFloat("Camera speed", &cam.movement_speed, 0.1f, 15.0f, "%.1f");
-            ImGui::Separator();
-            ImGui::SliderFloat3("Suzanne translation", gui.test_translation, -10.0f, 10.0f, "%.2f");
-            ImGui::SliderFloat("Suzanne scale", &gui.test_scale, 0.1f, 5.0f, "%.2f");
-            ImGui::End();
-
-            //ImGui::ShowDemoWindow();
-
-            ImGui::Render();
+            gui.Render();
 
             DrawFrame();
         }
@@ -2592,7 +2704,7 @@ void KeyboardCallback(GLFWwindow* window, int key, int scancode, int action, int
     }
 
     // Enable/Disable Camera
-    if (spacebar_down && glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)
+    if (gui.spacebar_down && glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)
     {
         cam.enabled = !cam.enabled;
 
@@ -2602,11 +2714,11 @@ void KeyboardCallback(GLFWwindow* window, int key, int scancode, int action, int
         else
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
-        spacebar_down = false;
+        gui.spacebar_down = false;
     }
 
-    if (!spacebar_down && glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-        spacebar_down = true;
+    if (!gui.spacebar_down && glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+        gui.spacebar_down = true;
 
     // Ignore Keyboard Inputs for Camera Movement if arcball_mode == true
     if (cam.arcball_mode)
@@ -2631,18 +2743,18 @@ void MouseMovementCallback(GLFWwindow* window, double x_pos, double y_pos)
     float xpos = static_cast<float>(x_pos);
     float ypos = static_cast<float>(y_pos);
 
-    if (first_mouse_flag)
+    if (gui.first_mouse_flag)
     {
-        lastX = xpos;
-        lastY = ypos;
-        first_mouse_flag = false;
+        gui.lastX = xpos;
+        gui.lastY = ypos;
+        gui.first_mouse_flag = false;
     }
 
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos;
+    float xoffset = xpos - gui.lastX;
+    float yoffset = gui.lastY - ypos;
 
-    lastX = xpos;
-    lastY = ypos;
+    gui.lastX = xpos;
+    gui.lastY = ypos;
 
     TimeData time = timer.GetData();
     if (cam.arcball_mode)

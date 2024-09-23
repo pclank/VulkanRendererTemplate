@@ -36,4 +36,9 @@ struct AnimationClip {
 	std::string nameID;									// Name of animation (currently not used)
 	int n_bones;										// Number of bones in animation
 	int max_frames;										// Maximum number of keyframes in a channel
+
+	AnimationClip(std::string nameID, int n_bones, int max_frames, double duration, double ticks_per_second, std::map<std::string, AnimationPose > poseSamples)
+		:
+		nameID(nameID), n_bones(n_bones), max_frames(max_frames), duration(duration), ticks_per_second(ticks_per_second), poseSamples(poseSamples)
+	{};
 };
