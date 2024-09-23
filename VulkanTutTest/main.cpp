@@ -279,9 +279,12 @@ private:
     std::vector<VkDeviceMemory> vertexBufferMemories;
     std::vector<VkBuffer> indexBuffers;
     std::vector<VkDeviceMemory> indexBufferMemories;
-    std::vector<VkBuffer> uniformBuffers;
+    /*std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
-    std::vector<void*> uniformBuffersMapped;
+    std::vector<void*> uniformBuffersMapped;*/
+    std::vector<std::vector<VkBuffer>> uniformBuffers;
+    std::vector<std::vector<VkDeviceMemory>> uniformBuffersMemory;
+    std::vector<std::vector<void*>> uniformBuffersMapped;
     VkDescriptorPool descriptorPool;
     VkDescriptorPool imguiDescriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
@@ -503,15 +506,17 @@ private:
         ImportModel();
         CreateVertexBuffer(models.size() - 1);
         CreateIndexBuffer(models.size() - 1);
+        CreateUniformBuffers(models.size() - 1);
         ImportModel("models/suzanne.obj");
         CreateVertexBuffer(models.size() - 1);
         CreateIndexBuffer(models.size() - 1);
+        CreateUniformBuffers(models.size() - 1);
 #else
         LoadModel();
         CreateVertexBuffer();
         CreateIndexBuffer();
-#endif // USE_ASSIMP
         CreateUniformBuffers();
+#endif // USE_ASSIMP
         CreateDescriptorPool();
         CreateDescriptorSets();
         CreateCommandBuffers();
@@ -573,7 +578,8 @@ private:
         vkResetCommandBuffer(commandBuffers[currentFrame], 0);
         RecordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
-        UpdateUniformBuffer(currentFrame);
+        for (size_t i = 0; i < models.size(); i++)
+            UpdateUniformBuffer(i, currentFrame);
 
         // Submit command buffer
         VkSubmitInfo submitInfo{};
@@ -650,10 +656,13 @@ private:
 
         CleanupSwapChain();
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        for (size_t i = 0; i < uniformBuffers.size(); i++)
         {
-            vkDestroyBuffer(device, uniformBuffers[i], nullptr);
-            vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+            for (size_t j = 0; j < MAX_FRAMES_IN_FLIGHT; j++)
+            {
+                vkDestroyBuffer(device, uniformBuffers[i][j], nullptr);
+                vkFreeMemory(device, uniformBuffersMemory[i][j], nullptr);
+            }
         }
 
         vkDestroyImageView(device, textureImageView, nullptr);
@@ -1896,23 +1905,27 @@ private:
             throw std::runtime_error("failed to create descriptor set layout!");
     }
 
-    void CreateUniformBuffers()
+    void CreateUniformBuffers(const size_t modelIndex)
     {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-        uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+        uniformBuffers.resize(models.size());
+        uniformBuffersMemory.resize(models.size());
+        uniformBuffersMapped.resize(models.size());
+        uniformBuffers[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
+        uniformBuffersMemory[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
+        uniformBuffersMapped[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
+            CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                uniformBuffers[modelIndex][i], uniformBuffersMemory[modelIndex][i]);
 
             // Persistent mapping
-            vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
+            vkMapMemory(device, uniformBuffersMemory[modelIndex][i], 0, bufferSize, 0, &uniformBuffersMapped[modelIndex][i]);
         }
     }
 
-    void UpdateUniformBuffer(uint32_t currentFrame)
+    void UpdateUniformBuffer(const size_t modelIndex, uint32_t currentFrame)
     {
         UniformBufferObject ubo{};
 #ifdef ENABLE_CAMERA_ANIM
@@ -1931,10 +1944,21 @@ private:
             , glm::radians(-90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.proj = cam.GetCurrentProjectionMatrix(swapChainExtent.width, swapChainExtent.height);
         ubo.view = cam.GetCurrentViewMatrix();
+
+        if (modelIndex == 1)
+        {
+            static auto startTime = std::chrono::high_resolution_clock::now();
+
+            auto currentTime = std::chrono::high_resolution_clock::now();
+
+            float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+            ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        }
+
 #endif // ENABLE_CAMERA_ANIM
         ubo.proj[1][1] *= -1;   // Flip sign of scaling factor
 
-        memcpy(uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+        memcpy(uniformBuffersMapped[modelIndex][currentFrame], &ubo, sizeof(ubo));
     }
 
     void CreateDescriptorPool()
@@ -1991,7 +2015,7 @@ private:
         {
             // UBO
             VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = uniformBuffers[i];
+            bufferInfo.buffer = uniformBuffers[0][i];
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(UniformBufferObject);
 
