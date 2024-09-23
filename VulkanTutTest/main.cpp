@@ -285,9 +285,11 @@ private:
     std::vector<std::vector<VkBuffer>> uniformBuffers;
     std::vector<std::vector<VkDeviceMemory>> uniformBuffersMemory;
     std::vector<std::vector<void*>> uniformBuffersMapped;
-    VkDescriptorPool descriptorPool;
+    //VkDescriptorPool descriptorPool;
+    std::vector<VkDescriptorPool> descriptorPools;
     VkDescriptorPool imguiDescriptorPool;
-    std::vector<VkDescriptorSet> descriptorSets;
+    //std::vector<VkDescriptorSet> descriptorSets;
+    std::vector<std::vector<VkDescriptorSet>> descriptorSets;
     uint32_t mipLevels;
     VkImage textureImage;
     VkDeviceMemory textureImageMemory;
@@ -507,18 +509,22 @@ private:
         CreateVertexBuffer(models.size() - 1);
         CreateIndexBuffer(models.size() - 1);
         CreateUniformBuffers(models.size() - 1);
+        CreateDescriptorPool(models.size() - 1);
+        CreateDescriptorSets(models.size() - 1);
         ImportModel("models/suzanne.obj");
         CreateVertexBuffer(models.size() - 1);
         CreateIndexBuffer(models.size() - 1);
         CreateUniformBuffers(models.size() - 1);
+        CreateDescriptorPool(models.size() - 1);
+        CreateDescriptorSets(models.size() - 1);
 #else
         LoadModel();
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
-#endif // USE_ASSIMP
         CreateDescriptorPool();
         CreateDescriptorSets();
+#endif // USE_ASSIMP
         CreateCommandBuffers();
         CreateSyncObjects();
     }
@@ -670,7 +676,9 @@ private:
         vkDestroyImage(device, textureImage, nullptr);
         vkFreeMemory(device, textureImageMemory, nullptr);
 
-        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+        for (size_t i = 0; i < descriptorPools.size(); i++)
+            vkDestroyDescriptorPool(device, descriptorPools[i], nullptr);
+
         vkDestroyDescriptorPool(device, imguiDescriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
         
@@ -1706,7 +1714,7 @@ private:
             scissor.extent = swapChainExtent;
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i][currentFrame], 0, nullptr);
 
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(models[i].meshes[0].indices.size()), 1, 0, 0, 0);
         }
@@ -1961,8 +1969,10 @@ private:
         memcpy(uniformBuffersMapped[modelIndex][currentFrame], &ubo, sizeof(ubo));
     }
 
-    void CreateDescriptorPool()
+    void CreateDescriptorPool(const size_t modelIndex)
     {
+        descriptorPools.resize(descriptorPools.size() + 1);
+
         std::array<VkDescriptorPoolSize, 2> poolSizes;
         // UBO
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1978,7 +1988,7 @@ private:
         poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
         //poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
-        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPools[modelIndex]) != VK_SUCCESS)
             throw std::runtime_error("failed to create descriptor pool!");
     }
 
@@ -1998,24 +2008,26 @@ private:
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &imguiDescriptorPool));
     }
 
-    void CreateDescriptorSets()
+    void CreateDescriptorSets(const size_t modelIndex)
     {
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorPool = descriptorPools[modelIndex];
         allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
         allocInfo.pSetLayouts = layouts.data();
 
-        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-        if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS)
+        descriptorSets.resize(descriptorSets.size() + 1);
+        descriptorSets[modelIndex].resize(static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
+
+        if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets[modelIndex].data()) != VK_SUCCESS)
             throw std::runtime_error("failed to allocate descriptor sets!");
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             // UBO
             VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = uniformBuffers[0][i];
+            bufferInfo.buffer = uniformBuffers[modelIndex][i];
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(UniformBufferObject);
 
@@ -2028,7 +2040,7 @@ private:
             // Update configurations
             std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = descriptorSets[i];
+            descriptorWrites[0].dstSet = descriptorSets[modelIndex][i];
             descriptorWrites[0].dstBinding = 0;
             descriptorWrites[0].dstArrayElement = 0;
             descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -2038,7 +2050,7 @@ private:
             descriptorWrites[0].pTexelBufferView = nullptr; // Optional
 
             descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = descriptorSets[i];
+            descriptorWrites[1].dstSet = descriptorSets[modelIndex][i];
             descriptorWrites[1].dstBinding = 1;
             descriptorWrites[1].dstArrayElement = 0;
             descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
