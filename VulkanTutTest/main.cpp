@@ -49,6 +49,8 @@
 // Local Libraries
 #include <Camera.hpp>
 #include <Timer.hpp>
+#include <Vertex.hpp>
+#include <Model.hpp>
 
 // Macros
 #define REQUIRE_GEOM_SHADERS
@@ -113,55 +115,6 @@ struct SwapChainSupportDetails {
     VkSurfaceCapabilitiesKHR capabilities;
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR> presentModes;
-};
-
-struct Vertex {
-    glm::vec3 pos;
-    glm::vec3 color;
-    glm::vec2 texCoord;
-    glm::vec3 norm;
-
-    bool operator==(const Vertex& other) const
-    {
-        // TODO: Extend!
-        return pos == other.pos && color == other.color && texCoord == other.texCoord && norm == other.norm;
-    }
-
-    static VkVertexInputBindingDescription GetBindingDescription()
-    {
-        VkVertexInputBindingDescription bindingDescription{};
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(Vertex);
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        return bindingDescription;
-    }
-
-    static std::array<VkVertexInputAttributeDescription, 4> GetAttributeDescriptions()
-    {
-        std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-        attributeDescriptions[2].binding = 0;
-        attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
-
-        attributeDescriptions[3].binding = 0;
-        attributeDescriptions[3].location = 3;
-        attributeDescriptions[3].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[3].offset = offsetof(Vertex, norm);
-
-        return attributeDescriptions;
-    }
 };
 
 // Hash function for Vertex struct
@@ -262,7 +215,6 @@ inline glm::vec2 Assimp2GLMVEC2(aiVector2D& src)
     return res;
 }
 
-
 // Global objects and stuff
 Camera cam = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 bool spacebar_down = false;
@@ -344,6 +296,7 @@ private:
     VkImageView depthImageView;
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
+    Model model;
     VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
     VkImage colorImage;
     VkDeviceMemory colorImageMemory;
@@ -402,6 +355,9 @@ private:
         if (!scene->HasMeshes())
             throw std::runtime_error("failed to parse scene: no meshes!");
 
+        model.name = scene->mName.C_Str();
+        model.meshes.resize(scene->mNumMeshes);
+
         // Parse model
         for (size_t i = 0; i < scene->mNumMeshes; i++)
         {
@@ -410,19 +366,23 @@ private:
             if (mesh->mNumVertices < 1)
                 throw std::runtime_error("failed to parse mesh: empty vertices!");
 
-            vertices.resize(mesh->mNumVertices);
+            //Mesh tmpMesh = Mesh(scene->mName.C_Str(), scene);
+            model.meshes[i].name = scene->mName.C_Str();
+            model.meshes[i].scene = scene;
+
+            model.meshes[i].vertices.resize(mesh->mNumVertices);
             //indices.resize(mesh->mNumFaces);
 
             // Parse mesh vertices
             for (size_t j = 0; j < mesh->mNumVertices; j++)
             {
-                vertices[j].pos = Assimp2GLMVEC3(mesh->mVertices[j]);
+                model.meshes[i].vertices[j].pos = Assimp2GLMVEC3(mesh->mVertices[j]);
 
                 // Parse texCoords (first channel)
-                vertices[j].texCoord = (mesh->mTextureCoords[0]) ? glm::vec2(mesh->mTextureCoords[0][j].x, 1.0f - mesh->mTextureCoords[0][j].y) : glm::vec2(0.0f);
+                model.meshes[i].vertices[j].texCoord = (mesh->mTextureCoords[0]) ? glm::vec2(mesh->mTextureCoords[0][j].x, 1.0f - mesh->mTextureCoords[0][j].y) : glm::vec2(0.0f);
 
                 // Parse normals
-                vertices[j].norm = Assimp2GLMVEC3(mesh->mNormals[j]);
+                model.meshes[i].vertices[j].norm = Assimp2GLMVEC3(mesh->mNormals[j]);
 
                 // TODO: Parse bones!
             }
@@ -430,9 +390,9 @@ private:
             // Parse indices
             for (size_t j = 0; j < mesh->mNumFaces; j++)
                 for (size_t z = 0; z < mesh->mFaces[j].mNumIndices; z++)
-                    indices.push_back(mesh->mFaces[j].mIndices[z]);
+                    model.meshes[i].indices.push_back(mesh->mFaces[j].mIndices[z]);
 
-            std::cout << "Loaded mesh " << mesh->mName.C_Str() << " Successfully with " << vertices.size() << " vertices, and " << indices.size() << " triangles!" << std::endl;
+            std::cout << "Loaded mesh " << mesh->mName.C_Str() << " Successfully with " << model.meshes[i].vertices.size() << " vertices, and " << model.meshes[i].indices.size() << " triangles!" << std::endl;
         }
     }
 
@@ -1723,7 +1683,7 @@ private:
 
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model.meshes[0].indices.size()), 1, 0, 0, 0);
 
         // Record dear imgui primitives into command buffer
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
@@ -1791,7 +1751,11 @@ private:
 
     void CreateVertexBuffer()
     {
+#ifdef USE_ASSIMP
+        VkDeviceSize bufferSize = sizeof(model.meshes[0].vertices[0]) * model.meshes[0].vertices.size();
+#else
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+#endif // USE_ASSIMP
 
         // Staging buffer
         VkBuffer stagingBuffer;
@@ -1802,7 +1766,11 @@ private:
         // Map memory
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+#ifdef USE_ASSIMP
+        memcpy(data, model.meshes[0].vertices.data(), static_cast<size_t>(bufferSize));
+#else
         memcpy(data, vertices.data(), static_cast<size_t>(bufferSize));
+#endif // USE_ASSIMP
         vkUnmapMemory(device, stagingBufferMemory);
 
         CreateBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -1816,7 +1784,11 @@ private:
 
     void CreateIndexBuffer()
     {
+#ifdef USE_ASSIMP
+        VkDeviceSize bufferSize = sizeof(model.meshes[0].indices[0]) * model.meshes[0].indices.size();
+#else
         VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+#endif // USE_ASSIMP
 
         // Staging buffer
         VkBuffer stagingBuffer;
@@ -1827,7 +1799,11 @@ private:
         // Map memory
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+#ifdef USE_ASSIMP
+        memcpy(data, model.meshes[0].indices.data(), static_cast<size_t>(bufferSize));
+#else
         memcpy(data, indices.data(), static_cast<size_t>(bufferSize));
+#endif // USE_ASSIMP
         vkUnmapMemory(device, stagingBufferMemory);
 
         CreateBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,

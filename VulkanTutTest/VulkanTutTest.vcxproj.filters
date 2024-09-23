@@ -329,6 +329,15 @@
     <ClInclude Include="assimp-5.4.3\build\include\assimp\revision.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Model.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Vertex.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AnimationClip.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="assimp-5.4.3\include\assimp\color4.inl">
