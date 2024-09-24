@@ -6,6 +6,7 @@ struct GUI {
 	bool spacebar_down = false;
 	bool first_mouse_flag = true;
     bool wireframe_flag = false;
+    bool skybox_flag = true;
 	float lastX = 0.0f;
 	float lastY = 0.0f;
     Camera* cam;
@@ -34,6 +35,7 @@ struct GUI {
         ImGui::SliderFloat("Suzanne scale", &test_scale, 0.1f, 5.0f, "%.2f");
         ImGui::Separator();
         ImGui::Checkbox("Wireframe rendering", &wireframe_flag);
+        ImGui::Checkbox("Skybox rendering", &skybox_flag);
         for (size_t i = 0; i < nModels; i++)
         {
             const std::string str = std::string("Model ") + std::to_string(i) + " enabled";
