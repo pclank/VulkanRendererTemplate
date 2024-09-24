@@ -42,8 +42,10 @@ void main()
 
     // TODO: Tangent and Bitangent will also be affected by finalBoneTransform!
 
-    gl_Position = ubo.proj * ubo.view * ubo.model * newPosition;
-    fragNorm = mat3(transpose(inverse(ubo.model))) * newNormal.xyz;
+    // gl_Position = ubo.proj * ubo.view * ubo.model * newPosition;
+    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPos, 1.0f);
+    // fragNorm = mat3(transpose(inverse(ubo.model))) * newNormal.xyz;
+    fragNorm = inNorm;
     fragColor = inColor;
     fragTexCoord = inTexCoord;
 }

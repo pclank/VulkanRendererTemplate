@@ -26,9 +26,9 @@ struct Mesh {
 	int boneCounter = 0;						// Number of bones in mesh rig
 	glm::mat4 inverseTransform;					// Inverse transform matrix for mesh to scene. Possibly only useful if more submeshes are used
 
-	uint32_t m_boneVertexCount;
+	/*uint32_t m_boneVertexCount;
 	uint32_t m_skeletonVBO;
-	uint32_t m_skeletonVAO;
+	uint32_t m_skeletonVAO;*/
 
 	//Mesh(const char* name, const aiScene* scene) : name(name), scene(scene) {}
 	Mesh()
@@ -41,4 +41,5 @@ struct Model {
 	const char* name;
 	std::vector<Mesh> meshes;
 	bool enabled = true;
+	uint32_t pipelineIndex = 0;
 };

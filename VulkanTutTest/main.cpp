@@ -263,8 +263,8 @@ private:
     VkRenderPass renderPass;
     VkRenderPass imguiRenderPass;
     VkDescriptorSetLayout descriptorSetLayout;
-    VkPipelineLayout pipelineLayout;
-    VkPipeline graphicsPipeline;
+    std::vector<VkPipelineLayout> pipelineLayouts;
+    std::vector<VkPipeline> graphicsPipelines;
     std::vector<VkFramebuffer> swapChainFramebuffers;
     std::vector<VkFramebuffer> imguiFramebuffers;
     VkCommandPool commandPool;
@@ -343,7 +343,7 @@ private:
             throw std::runtime_error("model importing failed!");
     }
 
-    void ImportModel(const char* file = MODEL_PATH.c_str())
+    void ImportModel(const uint32_t pipelineIndex, const char* file = MODEL_PATH.c_str())
     {
         Assimp::Importer importer;
         InitImporter(importer, file);
@@ -373,6 +373,7 @@ private:
 
         model.name = scene->mName.C_Str();
         model.meshes.resize(scene->mNumMeshes);
+        model.pipelineIndex = pipelineIndex;
 
         // Parse model
         for (size_t i = 0; i < scene->mNumMeshes; i++)
@@ -624,9 +625,9 @@ private:
         app->framebufferResized = true;
     }
 
-    void AddModel(const char* modelFile = MODEL_PATH.c_str(), const char* textureFile = TEXTURE_PATH.c_str())
+    void AddModel(const uint32_t pipelineIndex = 0, const char* modelFile = MODEL_PATH.c_str(), const char* textureFile = TEXTURE_PATH.c_str())
     {
-        ImportModel(modelFile);
+        ImportModel(pipelineIndex, modelFile);
         CreateTextureImage(models.size() - 1, textureFile);
         CreateTextureImageView(models.size() - 1);
         CreateTextureSampler(models.size() - 1);
@@ -649,14 +650,15 @@ private:
         CreateRenderPass();
         CreateDescriptorSetLayout();
         CreateGraphicsPipeline();
+        CreateGraphicsPipeline("shaders/linear_skinning_vert.spv", "shaders/linear_skinning_frag.spv");
         CreateCommandPools();
         CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
 #ifdef USE_ASSIMP
         AddModel();
-        AddModel("models/suzanne.obj", "textures/marble.png");
-        AddModel("models/boy_animated.fbx", "textures/plaster.jpg");
+        AddModel(0, "models/suzanne.obj", "textures/marble.png");
+        AddModel(1, "models/boy_animated.fbx", "textures/plaster.jpg");
 #else
         LoadModel();
         CreateTextureImage();
@@ -775,9 +777,11 @@ private:
         vkDestroyCommandPool(device, transCommandPool, nullptr);
         vkDestroyCommandPool(device, imguiCommandPool, nullptr);
 
-        vkDestroyPipeline(device, graphicsPipeline, nullptr);
+        for (size_t i = 0; i < graphicsPipelines.size(); i++)
+            vkDestroyPipeline(device, graphicsPipelines[i], nullptr);
 
-        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        for (size_t i = 0; i < pipelineLayouts.size(); i++)
+            vkDestroyPipelineLayout(device, pipelineLayouts[i], nullptr);
 
         vkDestroyRenderPass(device, renderPass, nullptr);
         vkDestroyRenderPass(device, imguiRenderPass, nullptr);
@@ -1375,10 +1379,10 @@ private:
         }
     }
 
-    void CreateGraphicsPipeline()
+    void CreateGraphicsPipeline(const char* vertShaderFile = "shaders/vert.spv", const char* fragShaderFile = "shaders/frag.spv")
     {
-        auto vertShaderCode = ReadFile("shaders/vert.spv");
-        auto fragShaderCode = ReadFile("shaders/frag.spv");
+        auto vertShaderCode = ReadFile(vertShaderFile);
+        auto fragShaderCode = ReadFile(fragShaderFile);
 
         VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
@@ -1513,7 +1517,9 @@ private:
         pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
         pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
-        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+        pipelineLayouts.resize(pipelineLayouts.size() + 1);
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayouts.back()) != VK_SUCCESS)
             throw std::runtime_error("failed to create pipeline layout!");
 
         // Create pipeline
@@ -1529,13 +1535,15 @@ private:
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = pipelineLayout;
+        pipelineInfo.layout = pipelineLayouts[pipelineLayouts.size() - 1];
         pipelineInfo.renderPass = renderPass;
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
         pipelineInfo.basePipelineIndex = -1; // Optional
 
-        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS)
+        graphicsPipelines.resize(graphicsPipelines.size() + 1);
+
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipelines.back()) != VK_SUCCESS)
             throw std::runtime_error("failed to create graphics pipeline!");
 
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
@@ -1823,14 +1831,14 @@ private:
         // Begin render pass
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        // TODO: Need another pipeline for different shader setup!
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-
         for (size_t i = 0; i < models.size(); i++)
         {
             // Only render model if enabled
             if (!models[i].enabled)
                 continue;
+
+            // Bind graphics pipeline
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipelines[models[i].pipelineIndex]);
 
             VkBuffer vertexBuffersRend[] = { vertexBuffers[i]};
             VkDeviceSize offsets[] = { 0 };
@@ -1851,7 +1859,7 @@ private:
             scissor.extent = swapChainExtent;
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i][currentFrame], 0, nullptr);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts[models[i].pipelineIndex], 0, 1, &descriptorSets[i][currentFrame], 0, nullptr);
 
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(models[i].meshes[0].indices.size()), 1, 0, 0, 0);
         }
