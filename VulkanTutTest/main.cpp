@@ -54,6 +54,7 @@
 #include <Model.hpp>
 #include <GUI.hpp>
 #include <AnimationClip.hpp>
+#include <Skybox.hpp>
 
 // Macros
 #define REQUIRE_GEOM_SHADERS
@@ -76,6 +77,7 @@ const uint32_t HEIGHT = 600;
 
 const std::string MODEL_PATH = "models/viking_room.obj";
 const std::string TEXTURE_PATH = "textures/viking_room.png";
+const std::string SKYBOX_PATH = "textures/skybox/";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 const size_t MAX_BONES = 120;
@@ -311,6 +313,10 @@ private:
     VkImage colorImage;
     VkDeviceMemory colorImageMemory;
     VkImageView colorImageView;
+    VkImage skyboxImage;
+    VkDeviceMemory skyboxImageMemory;
+    VkImageView skyboxImageView;
+    VkSampler skyboxSampler;
 
     void InitWindow()
     {
@@ -672,6 +678,7 @@ private:
 #endif // USE_ASSIMP
         gui.nModels = models.size();
         gui.models = models.data();
+        LoadCubemap();
         CreateCommandBuffers();
         CreateSyncObjects();
     }
@@ -811,6 +818,11 @@ private:
             vkDestroyImage(device, textureImages[i], nullptr);
             vkFreeMemory(device, textureImageMemories[i], nullptr);
         }
+
+        vkDestroyImageView(device, skyboxImageView, nullptr);
+        vkDestroySampler(device, skyboxSampler, nullptr);
+        vkDestroyImage(device, skyboxImage, nullptr);
+        vkFreeMemory(device, skyboxImageMemory, nullptr);
 
         for (size_t i = 0; i < descriptorPools.size(); i++)
             vkDestroyDescriptorPool(device, descriptorPools[i], nullptr);
@@ -2295,6 +2307,146 @@ private:
         vkBindImageMemory(device, image, imageMemory, 0);
     }
 
+    void LoadCubemap(const char* folder = SKYBOX_PATH.c_str())
+    {
+        int texWidth, texHeight, texChannels;
+        std::vector<stbi_uc*> pixelVector;
+        for (uint32_t i = 0; i < 6; i++)
+        {
+            std::string fileName = folder + postfixes[i];
+            stbi_uc* pixels = stbi_load(fileName.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+            if (!pixels)
+                throw std::runtime_error("failed to load cubemap image!");
+
+            pixelVector.push_back(pixels);
+        }
+
+        const VkDeviceSize layerSize = texWidth * texHeight * 4;        // Size of each layer
+        const VkDeviceSize imageSize = layerSize * 6;                   // Total size
+
+        // Silly solution
+        stbi_uc* fillPixels = (stbi_uc*)malloc(imageSize);
+        for (size_t i = 0; i < 6; i++)
+        {
+            for (size_t j = 0; j < static_cast<uint32_t>(layerSize); j++)
+                fillPixels[i * layerSize + j] = pixelVector[i][j];
+        }
+
+        // Staging buffer
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+
+        CreateBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+
+        //memcpy(data, pixelVector.data(), static_cast<uint32_t>(imageSize));
+        //for (uint32_t i = 0; i < pixelVector.size(); i++)
+        //    memcpy((void*)(reinterpret_cast<uint32_t>(data) + (layerSize * i)), pixelVector[i], static_cast<uint32_t>(layerSize));
+        memcpy(data, fillPixels, static_cast<uint32_t>(imageSize));
+
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        for (uint32_t i = 0; i < pixelVector.size(); i++)
+            stbi_image_free(pixelVector[i]);
+
+        CreateCubeImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            skyboxImage, skyboxImageMemory);
+
+        TransitionImageLayout(skyboxImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 6);
+
+        CopyBufferToImage(stagingBuffer, skyboxImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 6);
+
+        //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        GenerateMipmaps(skyboxImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+        // ImageView and sampler creation
+        CreateCubemapImageView();
+        CreateCubemapSampler();
+    }
+
+    void CreateCubeImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
+    {
+        // Image creation
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent.width = static_cast<uint32_t>(width);
+        imageInfo.extent.height = static_cast<uint32_t>(height);
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = mipLevels;
+        imageInfo.arrayLayers = 6;                          // Cube faces count as array layers in Vulkan
+        imageInfo.format = format;
+        imageInfo.tiling = tiling;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = usage;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        imageInfo.samples = numSamples;
+        imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+
+        if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
+            throw std::runtime_error("failed to create image!");
+
+        // Allocate memory for image
+        VkMemoryRequirements memRequirements;
+        vkGetImageMemoryRequirements(device, image, &memRequirements);
+
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties);
+
+        if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS)
+            throw std::runtime_error("failed to allocate image memory!");
+
+        vkBindImageMemory(device, image, imageMemory, 0);
+    }
+
+    void CreateCubemapImageView()
+    {
+        skyboxImageView = CreateImageView(skyboxImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_CUBE, 6);
+    }
+
+    void CreateCubemapSampler()
+    {
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+#ifdef TEX_SAMPLER_MODE_REPEAT
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+#else
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+#endif // TEX_SAMPLER_MODE_REPEAT
+        samplerInfo.anisotropyEnable = VK_TRUE;
+
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = static_cast<float>(mipLevels);
+
+        if (vkCreateSampler(device, &samplerInfo, nullptr, &skyboxSampler) != VK_SUCCESS)
+            throw std::runtime_error("failed to create sampler!");
+    }
+
     void GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
     {
         // Linear filter support
@@ -2419,7 +2571,7 @@ private:
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
 
-    void TransitionImageLayout(VkImage image, uint32_t mipLevels, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, VkImageAspectFlags aspect)
+    void TransitionImageLayout(VkImage image, uint32_t mipLevels, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, VkImageAspectFlags aspect, uint32_t layerCount = 1)
     {
         VkCommandBuffer commandBuffer = BeginSingleTimeCommands(commandPool);
 
@@ -2434,7 +2586,7 @@ private:
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
+        barrier.subresourceRange.layerCount = layerCount;
 
         // Access masks and pipeline stages
         VkPipelineStageFlags sourceStage;
@@ -2483,7 +2635,7 @@ private:
         EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue);
     }
 
-    void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+    void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t layerCount = 1)
     {
         VkCommandBuffer commandBuffer = BeginSingleTimeCommands(commandPool);
 
@@ -2495,7 +2647,7 @@ private:
         region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         region.imageSubresource.mipLevel = 0;
         region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = 1;
+        region.imageSubresource.layerCount = layerCount;
 
         region.imageOffset = { 0, 0, 0 };
         region.imageExtent = {
@@ -2523,18 +2675,18 @@ private:
 
     }
 
-    VkImageView CreateImageView(VkImage image, uint32_t mipLevels, VkFormat format, VkImageAspectFlags aspectFlags)
+    VkImageView CreateImageView(VkImage image, uint32_t mipLevels, VkFormat format, VkImageAspectFlags aspectFlags, VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D, uint32_t layerCount = 1)
     {
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = image;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.viewType = viewType;
         viewInfo.format = format;
         viewInfo.subresourceRange.aspectMask = aspectFlags;
         viewInfo.subresourceRange.baseMipLevel = 0;
         viewInfo.subresourceRange.levelCount = mipLevels;
         viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
+        viewInfo.subresourceRange.layerCount = layerCount;
 
         VkImageView imageView;
         if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS)
