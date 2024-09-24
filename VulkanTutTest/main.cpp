@@ -1823,6 +1823,7 @@ private:
         // Begin render pass
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+        // TODO: Need another pipeline for different shader setup!
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
         for (size_t i = 0; i < models.size(); i++)
