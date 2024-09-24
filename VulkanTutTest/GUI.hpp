@@ -9,6 +9,8 @@ struct GUI {
 	float lastY = 0.0f;
     Camera* cam;
     Timer* timer;
+    Model* models = nullptr;
+    uint32_t nModels = 0;
 
     GUI(Camera* cam, Timer* timer) : cam(cam), timer(timer) {}
 
@@ -19,7 +21,7 @@ struct GUI {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImGui::Begin("Your friendly (???) Vulkan render");
+        ImGui::Begin("Your friendly (???) Vulkan renderer");
         ImGui::Text("FPS: %.2f", timer->GetData().FPS);
         ImGui::Separator();
         ImGui::Text("Campos: %.2f, %.2f, %.2f", cam->position.x, cam->position.y, cam->position.z);
@@ -29,6 +31,12 @@ struct GUI {
         ImGui::Separator();
         ImGui::SliderFloat3("Suzanne translation", test_translation, -10.0f, 10.0f, "%.2f");
         ImGui::SliderFloat("Suzanne scale", &test_scale, 0.1f, 5.0f, "%.2f");
+        ImGui::Separator();
+        for (size_t i = 0; i < nModels; i++)
+        {
+            const std::string str = std::string("Model ") + std::to_string(i) + " enabled";
+            ImGui::Checkbox(str.c_str(), &models[i].enabled);
+        }
         ImGui::End();
 
         //ImGui::ShowDemoWindow();

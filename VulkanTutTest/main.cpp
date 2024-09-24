@@ -78,6 +78,7 @@ const std::string MODEL_PATH = "models/viking_room.obj";
 const std::string TEXTURE_PATH = "textures/viking_room.png";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
+const size_t MAX_BONES = 120;
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
@@ -139,6 +140,7 @@ struct UniformBufferObject {
     glm::mat4 model;
     glm::mat4 view;
     glm::mat4 proj;
+    glm::mat4 boneTransforms[MAX_BONES];
 };
 
 // Hardcoded vertices and such
@@ -416,7 +418,7 @@ private:
                     model.meshes[i].indices.push_back(mesh->mFaces[j].mIndices[z]);
 
             // Parse bones!
-            ExtractBoneWeightForVertices(vertices, mesh, scene, model);
+            ExtractBoneWeightForVertices(model.meshes[i].vertices, mesh, scene, model);
 
             std::cout << "Loaded mesh " << mesh->mName.C_Str() << " Successfully with " << model.meshes[i].vertices.size() << " vertices, and " << model.meshes[i].indices.size() << " triangles!" << std::endl;
         }
@@ -622,6 +624,19 @@ private:
         app->framebufferResized = true;
     }
 
+    void AddModel(const char* modelFile = MODEL_PATH.c_str(), const char* textureFile = TEXTURE_PATH.c_str())
+    {
+        ImportModel(modelFile);
+        CreateTextureImage(models.size() - 1, textureFile);
+        CreateTextureImageView(models.size() - 1);
+        CreateTextureSampler(models.size() - 1);
+        CreateVertexBuffer(models.size() - 1);
+        CreateIndexBuffer(models.size() - 1);
+        CreateUniformBuffers(models.size() - 1);
+        CreateDescriptorPool(models.size() - 1);
+        CreateDescriptorSets(models.size() - 1);
+    }
+
     void InitVulkan()
     {
         CreateInstance();
@@ -639,24 +654,9 @@ private:
         CreateDepthResources();
         CreateFramebuffers();
 #ifdef USE_ASSIMP
-        ImportModel();
-        CreateTextureImage(models.size() - 1);
-        CreateTextureImageView(models.size() - 1);
-        CreateTextureSampler(models.size() - 1);
-        CreateVertexBuffer(models.size() - 1);
-        CreateIndexBuffer(models.size() - 1);
-        CreateUniformBuffers(models.size() - 1);
-        CreateDescriptorPool(models.size() - 1);
-        CreateDescriptorSets(models.size() - 1);
-        ImportModel("models/suzanne.obj");
-        CreateTextureImage(models.size() - 1, "textures/marble.png");
-        CreateTextureImageView(models.size() - 1);
-        CreateTextureSampler(models.size() - 1);
-        CreateVertexBuffer(models.size() - 1);
-        CreateIndexBuffer(models.size() - 1);
-        CreateUniformBuffers(models.size() - 1);
-        CreateDescriptorPool(models.size() - 1);
-        CreateDescriptorSets(models.size() - 1);
+        AddModel();
+        AddModel("models/suzanne.obj", "textures/marble.png");
+        AddModel("models/boy_animated.fbx", "textures/plaster.jpg");
 #else
         LoadModel();
         CreateTextureImage();
@@ -668,6 +668,8 @@ private:
         CreateDescriptorPool();
         CreateDescriptorSets();
 #endif // USE_ASSIMP
+        gui.nModels = models.size();
+        gui.models = models.data();
         CreateCommandBuffers();
         CreateSyncObjects();
     }
@@ -1825,6 +1827,10 @@ private:
 
         for (size_t i = 0; i < models.size(); i++)
         {
+            // Only render model if enabled
+            if (!models[i].enabled)
+                continue;
+
             VkBuffer vertexBuffersRend[] = { vertexBuffers[i]};
             VkDeviceSize offsets[] = { 0 };
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersRend, offsets);
@@ -2082,6 +2088,7 @@ private:
             , glm::radians(-90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.proj = cam.GetCurrentProjectionMatrix(swapChainExtent.width, swapChainExtent.height);
         ubo.view = cam.GetCurrentViewMatrix();
+        //ubo.boneTransforms = tran;
 
         if (modelIndex == 1)
         {
@@ -2094,6 +2101,9 @@ private:
             ubo.model = glm::translate(ubo.model, glm::vec3(gui.test_translation[0], gui.test_translation[1], gui.test_translation[2]));
             ubo.model = glm::rotate(ubo.model, time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         }
+
+        if (modelIndex == 2)
+            ubo.model = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
 
 #endif // ENABLE_CAMERA_ANIM
         ubo.proj[1][1] *= -1;   // Flip sign of scaling factor

@@ -40,4 +40,5 @@ struct Mesh {
 struct Model {
 	const char* name;
 	std::vector<Mesh> meshes;
+	bool enabled = true;
 };
