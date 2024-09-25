@@ -149,6 +149,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AnimationClip.hpp" />
+    <ClInclude Include="AnimationPlayer.hpp" />
     <ClInclude Include="assimp-5.4.3\build\include\assimp\config.h" />
     <ClInclude Include="assimp-5.4.3\build\include\assimp\revision.h" />
     <ClInclude Include="assimp-5.4.3\include\assimp\aabb.h" />
