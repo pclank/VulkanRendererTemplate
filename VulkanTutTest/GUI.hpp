@@ -3,6 +3,8 @@
 struct GUI {
 	float test_translation[3] = { 0.0f };
 	float test_scale = 1.0f;
+    float animated_scale = 1.0f;
+    float animation_speed = 1.0f;
 	bool spacebar_down = false;
 	bool first_mouse_flag = true;
     bool wireframe_flag = false;
@@ -33,9 +35,13 @@ struct GUI {
         ImGui::Separator();
         ImGui::SliderFloat3("Suzanne translation", test_translation, -10.0f, 10.0f, "%.2f");
         ImGui::SliderFloat("Suzanne scale", &test_scale, 0.1f, 5.0f, "%.2f");
+        ImGui::SliderFloat("Animated model scale", &animated_scale, 0.1f, 5.0f, "%.2f");
         ImGui::Separator();
         ImGui::Checkbox("Wireframe rendering", &wireframe_flag);
         ImGui::Checkbox("Skybox rendering", &skybox_flag);
+        ImGui::Separator();
+        ImGui::SliderFloat("Animation speed", &animation_speed, 0.1f, 2.0f, "%.2f");
+        ImGui::Separator();
         for (size_t i = 0; i < nModels; i++)
         {
             const std::string str = std::string("Model ") + std::to_string(i) + " enabled";

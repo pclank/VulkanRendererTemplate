@@ -347,6 +347,9 @@
     <ClInclude Include="AnimationPlayer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="CubicInterpolation.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="assimp-5.4.3\include\assimp\color4.inl">

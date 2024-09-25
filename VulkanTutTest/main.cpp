@@ -54,6 +54,7 @@
 #include <Model.hpp>
 #include <GUI.hpp>
 #include <AnimationClip.hpp>
+#include <AnimationPlayer.hpp>
 #include <Skybox.hpp>
 
 // Macros
@@ -79,6 +80,8 @@ const uint32_t HEIGHT = 600;
 const std::string MODEL_PATH = "models/viking_room.obj";
 const std::string TEXTURE_PATH = "textures/viking_room.png";
 const std::string SKYBOX_PATH = "textures/skybox/";
+const std::string MODELS_FOLDER = "models/";
+const std::string TEXTURES_FOLDER = "textures/";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 const size_t MAX_BONES = 120;
@@ -228,6 +231,7 @@ inline glm::quat Assimp2GLMQUAT(aiQuaternion& src)
 Camera cam = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 Timer timer;
 GUI gui = GUI(&cam, &timer);
+AnimationPlayer animPlayer = AnimationPlayer(0, nullptr);
 
 // Callbacks
 void MouseMovementCallback(GLFWwindow* window, double x_pos, double y_pos);
@@ -374,7 +378,9 @@ private:
 
     void ImportModel(const uint32_t pipelineIndex, const char* file = MODEL_PATH.c_str())
     {
-        Assimp::Importer importer;
+        Model model;
+
+        static Assimp::Importer importer;
         InitImporter(importer, file);
 
         const aiScene* scene = importer.GetScene();
@@ -394,8 +400,6 @@ private:
             std::cout << "Scene has " << scene->mNumTextures << " texture(s)!" << std::endl;
 #endif // MODEL_IMPORT_DEBUG
 
-        Model model;
-
         // Empty scene check
         if (!scene->HasMeshes())
             throw std::runtime_error("failed to parse scene: no meshes!");
@@ -413,8 +417,9 @@ private:
                 throw std::runtime_error("failed to parse mesh: empty vertices!");
 
             //Mesh tmpMesh = Mesh(scene->mName.C_Str(), scene);
+            model.meshes[i] = Mesh(scene);
             model.meshes[i].name = scene->mName.C_Str();
-            model.meshes[i].scene = scene;
+            //model.meshes[i].scene = scene;
 
             model.meshes[i].vertices.resize(mesh->mNumVertices);
 
@@ -457,6 +462,10 @@ private:
         ParseAnimations(scene, model);
 
         models.push_back(model);
+
+        // Map to Animation Player
+        if (!model.meshes[0].animations.empty() && animPlayer.tgt_model == nullptr)
+            animPlayer.SetValues(0, &models.back());
     }
 
     void ExtractBoneWeightForVertices(std::vector<Vertex>& vertices, const aiMesh* mesh, const aiScene* scene, Model& model)
@@ -474,7 +483,7 @@ private:
             {
                 BoneInfo newBoneInfo;
                 newBoneInfo.id = boneCount;
-                newBoneInfo.offsetMatrix = AssimpMatrix2GLMMAT4(mesh->mBones[boneIndex]->mOffsetMatrix);
+                newBoneInfo.offsetMatrix = ConvertMatrixToGLMFormat(mesh->mBones[boneIndex]->mOffsetMatrix);
                 //boneInfoMap[boneName] = boneCount;
                 boneInfoMap.insert({ boneName, boneCount });
                 model.meshes[0].bones.push_back(newBoneInfo);
@@ -700,6 +709,10 @@ private:
         AddModel();
         AddModel(0, "models/suzanne.obj", "textures/marble.png");
         AddModel(1, "models/boy_animated.fbx", "textures/plaster.jpg");
+        //AddModel(1, "models/wiggly.fbx", "textures/plaster.jpg");
+        //AddModel(1, "models/bob_lamp.fbx", "textures/plaster.jpg");
+        ////AddModel(1, "models/deer.fbx", "textures/plaster.jpg");
+        //AddModel(1, "models/female_doctor.fbx", "textures/plaster.jpg");
 #else
         LoadModel();
         CreateTextureImage();
@@ -2758,7 +2771,6 @@ private:
             , glm::radians(-90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.proj = cam.GetCurrentProjectionMatrix(swapChainExtent.width, swapChainExtent.height);
         ubo.view = cam.GetCurrentViewMatrix();
-        //ubo.boneTransforms = tran;
 
         if (modelIndex == 1)
         {
@@ -2773,10 +2785,21 @@ private:
         }
 
         if (modelIndex == 2)
-            ubo.model = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
+            ubo.model = glm::scale(glm::mat4(1.0f), glm::vec3(gui.animated_scale));
 
 #endif // ENABLE_CAMERA_ANIM
         ubo.proj[1][1] *= -1;   // Flip sign of scaling factor
+
+        // Animate model
+        // TODO: Add better logic!
+        if (modelIndex == 2 && !animPlayer.tgt_model->meshes[0].animations.empty())
+        {
+            std::vector<glm::vec3> skeletonBones;                   // TODO: NOT USED NOW!
+            animPlayer.UpdateTime(timer.GetData().DeltaTime, gui.animation_speed);
+            std::vector<glm::mat4> boneTranforms = animPlayer.tgt_model->AnimateLI(animPlayer.animation_time, &skeletonBones);
+            std::copy(std::begin(boneTranforms), std::end(boneTranforms), std::begin(ubo.boneTransforms));
+            //std::memcpy(ubo.boneTransforms, boneTranforms.data(), boneTranforms.size());
+        }
 
         memcpy(uniformBuffersMapped[modelIndex][currentFrame], &ubo, sizeof(ubo));
     }
@@ -2793,7 +2816,6 @@ private:
 
         memcpy(skyboxUniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
     }
-
 
     void CreateDescriptorPool(const size_t modelIndex)
     {
