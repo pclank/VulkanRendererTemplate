@@ -1,5 +1,10 @@
 #pragma once
 
+enum GUI_BUTTON {
+    RESET_BUTTON,
+    PLAY_PAUSE_BUTTON
+};
+
 struct GUI {
 	float test_translation[3] = { 0.0f };
 	float test_scale = 1.0f;
@@ -9,6 +14,8 @@ struct GUI {
 	bool first_mouse_flag = true;
     bool wireframe_flag = false;
     bool skybox_flag = true;
+    bool reset_animation_flag = false;
+    bool play_animation_flag = false;
 	float lastX = 0.0f;
 	float lastY = 0.0f;
     Camera* cam;
@@ -41,6 +48,12 @@ struct GUI {
         ImGui::Checkbox("Skybox rendering", &skybox_flag);
         ImGui::Separator();
         ImGui::SliderFloat("Animation speed", &animation_speed, 0.1f, 2.0f, "%.2f");
+        ImGui::BeginGroup();
+        if (ImGui::Button("Reset animation"))
+            ButtonCallback(RESET_BUTTON);
+        if (ImGui::Button("Start/Pause animation"))
+            ButtonCallback(PLAY_PAUSE_BUTTON);
+        ImGui::EndGroup();
         ImGui::Separator();
         for (size_t i = 0; i < nModels; i++)
         {
@@ -53,4 +66,13 @@ struct GUI {
 
         ImGui::Render();
 	}
+
+    // Button callbacks
+    void ButtonCallback(GUI_BUTTON button)
+    {
+        if (button == RESET_BUTTON)
+            reset_animation_flag = true;
+        else if (button == PLAY_PAUSE_BUTTON)
+            play_animation_flag = !play_animation_flag;
+    }
 };

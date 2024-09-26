@@ -2794,11 +2794,20 @@ private:
         // TODO: Add better logic!
         if (modelIndex == 2 && !animPlayer.tgt_model->meshes[0].animations.empty())
         {
+            animPlayer.is_playing = gui.play_animation_flag;
+
             std::vector<glm::vec3> skeletonBones;                   // TODO: NOT USED NOW!
             animPlayer.UpdateTime(timer.GetData().DeltaTime, gui.animation_speed);
+
+            // Checks for animation reset
+            if (gui.reset_animation_flag)
+            {
+                animPlayer.ResetTime();
+                gui.reset_animation_flag = false;
+            }
+
             std::vector<glm::mat4> boneTranforms = animPlayer.tgt_model->AnimateLI(animPlayer.animation_time, &skeletonBones);
-            std::copy(std::begin(boneTranforms), std::end(boneTranforms), std::begin(ubo.boneTransforms));
-            //std::memcpy(ubo.boneTransforms, boneTranforms.data(), boneTranforms.size());
+            memcpy(ubo.boneTransforms, boneTranforms.data(), boneTranforms.size() * sizeof(glm::mat4));
         }
 
         memcpy(uniformBuffersMapped[modelIndex][currentFrame], &ubo, sizeof(ubo));
