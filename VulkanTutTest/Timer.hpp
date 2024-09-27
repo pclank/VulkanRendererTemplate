@@ -1,4 +1,8 @@
 #pragma once
+#include <vector>
+#include <algorithm>
+
+const uint32_t FPS_SAMPLES = 100;
 
 /// <summary>
 /// TimeData used by the Timer class
@@ -34,8 +38,14 @@ public:
 		return m_timeData;
 	}
 
+	inline float* GetFPSS()
+	{
+		return fpss.data();
+	}
+
 private:
 	double m_prevTime;
 	double m_currentTime;
+	std::vector<float> fpss;
 	TimeData m_timeData;
 };

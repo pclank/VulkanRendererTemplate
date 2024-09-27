@@ -18,6 +18,7 @@ struct GUI {
     bool reset_animation_flag = false;
     bool play_animation_flag = false;
     bool blinn_flag = false;
+    bool cubic_interpolation_flag = false;
 	float lastX = 0.0f;
 	float lastY = 0.0f;
     Camera* cam;
@@ -33,9 +34,9 @@ struct GUI {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-
         ImGui::Begin("Your friendly (???) Vulkan renderer");
         ImGui::Text("FPS: %.2f", timer->GetData().FPS);
+        ImGui::PlotLines("FPS", timer->GetFPSS(), FPS_SAMPLES);
         ImGui::Separator();
         ImGui::Text("Campos: %.2f, %.2f, %.2f", cam->position.x, cam->position.y, cam->position.z);
         ImGui::Checkbox("Arcball mode", &cam->arcball_mode);
@@ -53,6 +54,7 @@ struct GUI {
         ImGui::Checkbox("Skybox rendering", &skybox_flag);
         ImGui::Separator();
         ImGui::SliderFloat("Animation speed", &animation_speed, 0.1f, 2.0f, "%.2f");
+        ImGui::Checkbox("Cubic interpolation", &cubic_interpolation_flag);
         ImGui::BeginGroup();
         if (ImGui::Button("Reset animation"))
             ButtonCallback(RESET_BUTTON);

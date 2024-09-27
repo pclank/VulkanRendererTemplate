@@ -281,8 +281,8 @@ private:
     // Graphics Pipelines
     std::vector<VkPipelineLayout> pipelineLayouts;
     std::vector<VkPipeline> graphicsPipelines;
-    VkPipelineLayout wireframePipelineLayout;
-    VkPipeline wireframeGraphicsPipeline;
+    std::vector<VkPipelineLayout> wireframePipelineLayouts;
+    std::vector<VkPipeline> wireframeGraphicsPipelines;
     VkPipelineLayout animatedWireframePipelineLayout;
     VkPipeline animatedWireframeGraphicsPipeline;
     VkPipelineLayout skyboxPipelineLayout;
@@ -708,6 +708,9 @@ private:
         else
             CreateDescriptorPool(models.size() - 1);
 
+        if (models.back().meshes[0].animations.empty())
+            CreateWireframeGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", passLightingData);
+
         CreateDescriptorSets(models.size() - 1, passLightingData);
     }
 
@@ -736,7 +739,6 @@ private:
         CreateGraphicsPipeline("shaders/linear_skinning_vert.spv", "shaders/linear_skinning_frag.spv");
         CreateGraphicsPipeline("shaders/blinn_phong_vert.spv", "shaders/blinn_phong_frag.spv", true);
         CreateSkyboxGraphicsPipeline("shaders/skybox_vert.spv", "shaders/skybox_frag.spv");
-        CreateWireframeGraphicsPipeline();
         CreateSkyboxWireframeGraphicsPipeline();
         CreateCommandPools();
         CreateColorResources();
@@ -888,8 +890,11 @@ private:
         for (size_t i = 0; i < pipelineLayouts.size(); i++)
             vkDestroyPipelineLayout(device, pipelineLayouts[i], nullptr);
 
-        vkDestroyPipeline(device, wireframeGraphicsPipeline, nullptr);
-        vkDestroyPipelineLayout(device, wireframePipelineLayout, nullptr);
+        for (size_t i = 0; i < wireframeGraphicsPipelines.size(); i++)
+            vkDestroyPipeline(device, wireframeGraphicsPipelines[i], nullptr);
+        for (size_t i = 0; i < wireframePipelineLayouts.size(); i++)
+            vkDestroyPipelineLayout(device, wireframePipelineLayouts[i], nullptr);
+
         vkDestroyPipeline(device, skyboxGraphicsPipeline, nullptr);
         vkDestroyPipelineLayout(device, skyboxPipelineLayout, nullptr);
         vkDestroyPipeline(device, skyboxWireframeGraphicsPipeline, nullptr);
@@ -1717,7 +1722,7 @@ private:
         return shaderModule;
     }
 
-    void CreateWireframeGraphicsPipeline(const char* vertShaderFile = "shaders/vert.spv", const char* fragShaderFile = "shaders/frag.spv")
+    void CreateWireframeGraphicsPipeline(const char* vertShaderFile = "shaders/vert.spv", const char* fragShaderFile = "shaders/frag.spv", bool passLightingData = false)
     {
         auto vertShaderCode = ReadFile(vertShaderFile);
         auto fragShaderCode = ReadFile(fragShaderFile);
@@ -1851,11 +1856,15 @@ private:
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+        if (passLightingData)
+            pipelineLayoutInfo.pSetLayouts = &lightingDataDescriptorSetLayout;
+        else
+            pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
         pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
         pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
-        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &wireframePipelineLayout) != VK_SUCCESS)
+        wireframePipelineLayouts.resize(wireframePipelineLayouts.size() + 1);
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &wireframePipelineLayouts[wireframePipelineLayouts.size() - 1]) != VK_SUCCESS)
             throw std::runtime_error("failed to create pipeline layout!");
 
         // Create pipeline
@@ -1871,13 +1880,14 @@ private:
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = pipelineLayouts[pipelineLayouts.size() - 1];
+        pipelineInfo.layout = wireframePipelineLayouts.back();
         pipelineInfo.renderPass = renderPass;
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
         pipelineInfo.basePipelineIndex = -1; // Optional
 
-        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &wireframeGraphicsPipeline) != VK_SUCCESS)
+        wireframeGraphicsPipelines.resize(wireframeGraphicsPipelines.size() + 1);
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &wireframeGraphicsPipelines[wireframeGraphicsPipelines.size() - 1]) != VK_SUCCESS)
             throw std::runtime_error("failed to create graphics pipeline!");
 
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
@@ -2706,7 +2716,7 @@ private:
             if (gui.wireframe_flag && !models[i].meshes[0].animations.empty())
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, animatedWireframeGraphicsPipeline);
             else if (gui.wireframe_flag && models[i].meshes[0].animations.empty())
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, wireframeGraphicsPipeline);
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, wireframeGraphicsPipelines[i]);
             else
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipelines[models[i].pipelineIndex]);
 
@@ -3109,7 +3119,11 @@ private:
                 gui.reset_animation_flag = false;
             }
 
-            std::vector<glm::mat4> boneTranforms = animPlayer.tgt_model->AnimateLI(animPlayer.animation_time, &skeletonBones);
+            std::vector<glm::mat4> boneTranforms;
+            if (gui.cubic_interpolation_flag)
+                boneTranforms = animPlayer.tgt_model->AnimateCI(animPlayer.animation_time, &skeletonBones);
+            else
+                boneTranforms = animPlayer.tgt_model->AnimateLI(animPlayer.animation_time, &skeletonBones);
             memcpy(ubo.boneTransforms, boneTranforms.data(), boneTranforms.size() * sizeof(glm::mat4));
         }
 
