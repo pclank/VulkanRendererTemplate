@@ -7,6 +7,7 @@ enum GUI_BUTTON {
 
 struct GUI {
 	float test_translation[3] = { 0.0f };
+    float light_pos[3] = { 0.0f, 5.0f, 1.0f };
 	float test_scale = 1.0f;
     float animated_scale = 1.0f;
     float animation_speed = 1.0f;
@@ -16,6 +17,7 @@ struct GUI {
     bool skybox_flag = true;
     bool reset_animation_flag = false;
     bool play_animation_flag = false;
+    bool blinn_flag = false;
 	float lastX = 0.0f;
 	float lastY = 0.0f;
     Camera* cam;
@@ -43,6 +45,9 @@ struct GUI {
         ImGui::SliderFloat3("Suzanne translation", test_translation, -10.0f, 10.0f, "%.2f");
         ImGui::SliderFloat("Suzanne scale", &test_scale, 0.1f, 5.0f, "%.2f");
         ImGui::SliderFloat("Animated model scale", &animated_scale, 0.1f, 5.0f, "%.2f");
+        ImGui::Separator();
+        ImGui::SliderFloat3("Light position", light_pos, -10.0f, 10.0f, "%.2f");
+        ImGui::Checkbox("Blinn mode", &blinn_flag);
         ImGui::Separator();
         ImGui::Checkbox("Wireframe rendering", &wireframe_flag);
         ImGui::Checkbox("Skybox rendering", &skybox_flag);

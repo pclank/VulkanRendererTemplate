@@ -149,6 +149,12 @@ struct UniformBufferObject {
     glm::mat4 boneTransforms[MAX_BONES];
 };
 
+struct LightDataUBO {
+    glm::vec3 lightPos;
+    glm::vec3 camPos;
+    bool blinn;
+};
+
 // Hardcoded vertices and such
 const std::vector<Vertex> vertices = {
     {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
@@ -270,6 +276,7 @@ private:
     VkRenderPass renderPass;
     VkRenderPass imguiRenderPass;
     VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorSetLayout lightingDataDescriptorSetLayout;
     // Graphics Pipelines
     std::vector<VkPipelineLayout> pipelineLayouts;
     std::vector<VkPipeline> graphicsPipelines;
@@ -311,6 +318,9 @@ private:
     std::vector<std::vector<VkBuffer>> uniformBuffers;
     std::vector<std::vector<VkDeviceMemory>> uniformBuffersMemory;
     std::vector<std::vector<void*>> uniformBuffersMapped;
+    std::vector<std::vector<VkBuffer>> lightingUniformBuffers;
+    std::vector<std::vector<VkDeviceMemory>> lightingUniformBuffersMemory;
+    std::vector<std::vector<void*>> lightingUniformBuffersMapped;
     std::vector<VkBuffer> skyboxUniformBuffers;
     std::vector<VkDeviceMemory> skyboxUniformBuffersMemory;
     std::vector<void*> skyboxUniformBuffersMapped;
@@ -319,6 +329,7 @@ private:
     std::vector<VkDescriptorPool> descriptorPools;
     VkDescriptorPool imguiDescriptorPool;
     VkDescriptorPool skyboxDescriptorPool;
+    VkDescriptorPool lightingDescriptorPool;
     //std::vector<VkDescriptorSet> descriptorSets;
     std::vector<std::vector<VkDescriptorSet>> descriptorSets;
     std::vector<VkDescriptorSet> skyboxDescriptorSet;
@@ -665,7 +676,7 @@ private:
         app->framebufferResized = true;
     }
 
-    void AddModel(const uint32_t pipelineIndex = 0, const char* modelFile = MODEL_PATH.c_str(), const char* textureFile = TEXTURE_PATH.c_str())
+    void AddModel(const uint32_t pipelineIndex = 0, bool passLightingData = false, const char* modelFile = MODEL_PATH.c_str(), const char* textureFile = TEXTURE_PATH.c_str())
     {
         ImportModel(pipelineIndex, modelFile);
         CreateTextureImage(models.size() - 1, textureFile);
@@ -674,8 +685,15 @@ private:
         CreateVertexBuffer(models.size() - 1);
         CreateIndexBuffer(models.size() - 1);
         CreateUniformBuffers(models.size() - 1);
-        CreateDescriptorPool(models.size() - 1);
-        CreateDescriptorSets(models.size() - 1);
+        if (passLightingData)
+        {
+            CreateLightingUniformBuffers(models.size() - 1);
+            CreateLightingDataDescriptorPool(models.size() - 1);
+        }
+        else
+            CreateDescriptorPool(models.size() - 1);
+
+        CreateDescriptorSets(models.size() - 1, passLightingData);
     }
 
     void AddSkybox(const char* folder = SKYBOX_PATH.c_str())
@@ -698,8 +716,10 @@ private:
         CreateImageViews();
         CreateRenderPass();
         CreateDescriptorSetLayout();
+        CreateLightingDataDescriptorSetLayout();
         CreateGraphicsPipeline();
         CreateGraphicsPipeline("shaders/linear_skinning_vert.spv", "shaders/linear_skinning_frag.spv");
+        CreateGraphicsPipeline("shaders/blinn_phong_vert.spv", "shaders/blinn_phong_frag.spv", true);
         CreateSkyboxGraphicsPipeline("shaders/skybox_vert.spv", "shaders/skybox_frag.spv");
         CreateWireframeGraphicsPipeline();
         CreateSkyboxWireframeGraphicsPipeline();
@@ -708,9 +728,10 @@ private:
         CreateDepthResources();
         CreateFramebuffers();
 #ifdef USE_ASSIMP
-        AddModel();
-        AddModel(0, "models/suzanne.obj", "textures/marble.png");
-        AddModel(1, "models/boy_animated.fbx", "textures/plaster.jpg");
+        AddModel(2, true);
+        //AddModel(0, false);
+        AddModel(0, false, "models/suzanne.obj", "textures/marble.png");
+        AddModel(1, false, "models/boy_animated.fbx", "textures/plaster.jpg");
         //AddModel(1, "models/wiggly.fbx", "textures/plaster.jpg");
         //AddModel(1, "models/bob_lamp.fbx", "textures/plaster.jpg");
         ////AddModel(1, "models/deer.fbx", "textures/plaster.jpg");
@@ -776,7 +797,13 @@ private:
 
         // Update model uniform buffers
         for (size_t i = 0; i < models.size(); i++)
+        {
             UpdateUniformBuffer(i, currentFrame);
+
+            // Update lighting data UBO
+            if (models[i].pipelineIndex == 2)
+                UpdateLightingDataUniformBuffer(i, currentFrame);
+        }
 
         // Update skybox uniform buffer
         UpdateSkyboxUniformBuffer(currentFrame);
@@ -882,6 +909,15 @@ private:
             vkFreeMemory(device, skyboxUniformBuffersMemory[i], nullptr);
         }
 
+        for (size_t i = 0; i < lightingUniformBuffers.size(); i++)
+        {
+            for (size_t j = 0; j < MAX_FRAMES_IN_FLIGHT; j++)
+            {
+                vkDestroyBuffer(device, lightingUniformBuffers[i][j], nullptr);
+                vkFreeMemory(device, lightingUniformBuffersMemory[i][j], nullptr);
+            }
+        }
+
         for (size_t i = 0; i < textureImages.size(); i++)
         {
             vkDestroyImageView(device, textureImageViews[i], nullptr);
@@ -900,8 +936,10 @@ private:
 
         vkDestroyDescriptorPool(device, imguiDescriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+        vkDestroyDescriptorSetLayout(device, lightingDataDescriptorSetLayout, nullptr);
 
         vkDestroyDescriptorPool(device, skyboxDescriptorPool, nullptr);
+        vkDestroyDescriptorPool(device, lightingDescriptorPool, nullptr);
         
         // Clear all vertex and index buffers and memories
         for (size_t i = 0; i < vertexBuffers.size(); i++)
@@ -1468,7 +1506,7 @@ private:
         }
     }
 
-    void CreateGraphicsPipeline(const char* vertShaderFile = "shaders/vert.spv", const char* fragShaderFile = "shaders/frag.spv")
+    void CreateGraphicsPipeline(const char* vertShaderFile = "shaders/vert.spv", const char* fragShaderFile = "shaders/frag.spv", bool passLightingData = false)
     {
         auto vertShaderCode = ReadFile(vertShaderFile);
         auto fragShaderCode = ReadFile(fragShaderFile);
@@ -1602,7 +1640,10 @@ private:
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+        if (passLightingData)
+            pipelineLayoutInfo.pSetLayouts = &lightingDataDescriptorSetLayout;
+        else
+            pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
         pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
         pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
@@ -2312,7 +2353,7 @@ private:
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = pipelineLayouts[pipelineLayouts.size() - 1];
+        pipelineInfo.layout = animatedWireframePipelineLayout;
         pipelineInfo.renderPass = renderPass;
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
@@ -2889,6 +2930,43 @@ private:
             throw std::runtime_error("failed to create descriptor set layout!");
     }
 
+    void CreateLightingDataDescriptorSetLayout()
+    {
+        // UBO descriptor layout
+        VkDescriptorSetLayoutBinding uboLayoutBinding{};
+        uboLayoutBinding.binding = 0;
+        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBinding.descriptorCount = 1;
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
+
+        // Combined image sampler descriptor layout
+        VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+        samplerLayoutBinding.binding = 1;
+        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerLayoutBinding.descriptorCount = 1;
+        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        samplerLayoutBinding.pImmutableSamplers = nullptr; // Optional
+
+        // Lighting data UBO descriptor layout
+        VkDescriptorSetLayoutBinding lightingUBOLayoutBinding{};
+        lightingUBOLayoutBinding.binding = 2;
+        lightingUBOLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        lightingUBOLayoutBinding.descriptorCount = 1;
+        lightingUBOLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        lightingUBOLayoutBinding.pImmutableSamplers = nullptr; // Optional
+
+        std::array<VkDescriptorSetLayoutBinding, 3> bindings = { uboLayoutBinding, samplerLayoutBinding, lightingUBOLayoutBinding };
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
+
+        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &lightingDataDescriptorSetLayout) != VK_SUCCESS)
+            throw std::runtime_error("failed to create descriptor set layout!");
+    }
+
     void CreateUniformBuffers(const size_t modelIndex)
     {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
@@ -2923,7 +3001,27 @@ private:
 
             // Persistent mapping
             vkMapMemory(device, skyboxUniformBuffersMemory[i], 0, bufferSize, 0, &skyboxUniformBuffersMapped[i]);
+        }
     }
+
+    void CreateLightingUniformBuffers(const uint32_t modelIndex)
+    {
+        VkDeviceSize bufferSize = sizeof(LightDataUBO);
+        lightingUniformBuffers.resize((models.size()));
+        lightingUniformBuffersMemory.resize((models.size()));
+        lightingUniformBuffersMapped.resize((models.size()));
+        lightingUniformBuffers[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
+        lightingUniformBuffersMemory[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
+        lightingUniformBuffersMapped[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                lightingUniformBuffers[modelIndex][i], lightingUniformBuffersMemory[modelIndex][i]);
+
+            // Persistent mapping
+            vkMapMemory(device, lightingUniformBuffersMemory[modelIndex][i], 0, bufferSize, 0, &lightingUniformBuffersMapped[modelIndex][i]);
+        }
     }
 
     void UpdateUniformBuffer(const size_t modelIndex, uint32_t currentFrame)
@@ -3000,6 +3098,17 @@ private:
         memcpy(skyboxUniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
     }
 
+    void UpdateLightingDataUniformBuffer(const size_t modelIndex, uint32_t currentFrame)
+    {
+        LightDataUBO lightUBO{};
+
+        lightUBO.blinn = gui.blinn_flag;
+        lightUBO.lightPos = glm::vec3(gui.light_pos[0], gui.light_pos[1], gui.light_pos[2]);
+        lightUBO.camPos = cam.position;
+
+        memcpy(lightingUniformBuffersMapped[modelIndex][currentFrame], &lightUBO, sizeof(lightUBO));
+    }
+
     void CreateDescriptorPool(const size_t modelIndex)
     {
         descriptorPools.resize(descriptorPools.size() + 1);
@@ -3060,14 +3169,52 @@ private:
             throw std::runtime_error("failed to create descriptor pool!");
     }
 
-    void CreateDescriptorSets(const size_t modelIndex)
+    void CreateLightingDataDescriptorPool(const uint32_t modelIndex)
+    {
+        descriptorPools.resize(descriptorPools.size() + 1);
+
+        std::array<VkDescriptorPoolSize, 3> poolSizes;
+        // UBO
+        poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        // Sampler
+        poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        // LightData UBO
+        poolSizes[2].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        //poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+
+        /*if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &lightingDescriptorPool) != VK_SUCCESS)
+            throw std::runtime_error("failed to create descriptor pool!");*/
+
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPools[modelIndex]) != VK_SUCCESS)
+            throw std::runtime_error("failed to create descriptor pool!");
+    }
+
+    void CreateDescriptorSets(const size_t modelIndex, bool passLightingData = false)
     {
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
+        std::vector<VkDescriptorSetLayout> lightingDataLayouts(MAX_FRAMES_IN_FLIGHT, lightingDataDescriptorSetLayout);
+
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        /*if (passLightingData)
+            allocInfo.descriptorPool = lightingDescriptorPool;
+        else
+            allocInfo.descriptorPool = descriptorPools[modelIndex];*/
         allocInfo.descriptorPool = descriptorPools[modelIndex];
         allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-        allocInfo.pSetLayouts = layouts.data();
+        if (passLightingData)
+            allocInfo.pSetLayouts = lightingDataLayouts.data();
+        else
+            allocInfo.pSetLayouts = layouts.data();
 
         descriptorSets.resize(descriptorSets.size() + 1);
         descriptorSets[modelIndex].resize(static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
@@ -3089,29 +3236,74 @@ private:
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             imageInfo.imageView = textureImageViews[modelIndex];
 
+            VkDescriptorBufferInfo lightingBufferInfo{};
+
             // Update configurations
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
-            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = descriptorSets[modelIndex][i];
-            descriptorWrites[0].dstBinding = 0;
-            descriptorWrites[0].dstArrayElement = 0;
-            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            descriptorWrites[0].descriptorCount = 1;
-            descriptorWrites[0].pBufferInfo = &bufferInfo;
-            descriptorWrites[0].pImageInfo = nullptr; // Optional
-            descriptorWrites[0].pTexelBufferView = nullptr; // Optional
+            if (passLightingData)
+            {
+                // Lighting data UBO
+                lightingBufferInfo.buffer = lightingUniformBuffers[modelIndex][i];
+                lightingBufferInfo.offset = 0;
+                lightingBufferInfo.range = sizeof(LightDataUBO);
 
-            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = descriptorSets[modelIndex][i];
-            descriptorWrites[1].dstBinding = 1;
-            descriptorWrites[1].dstArrayElement = 0;
-            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pBufferInfo = nullptr;   // Optional
-            descriptorWrites[1].pImageInfo = &imageInfo;
-            descriptorWrites[1].pTexelBufferView = nullptr; // Optional
+                std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
+                descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptorWrites[0].dstSet = descriptorSets[modelIndex][i];
+                descriptorWrites[0].dstBinding = 0;
+                descriptorWrites[0].dstArrayElement = 0;
+                descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                descriptorWrites[0].descriptorCount = 1;
+                descriptorWrites[0].pBufferInfo = &bufferInfo;
+                descriptorWrites[0].pImageInfo = nullptr; // Optional
+                descriptorWrites[0].pTexelBufferView = nullptr; // Optional
 
-            vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+                descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptorWrites[1].dstSet = descriptorSets[modelIndex][i];
+                descriptorWrites[1].dstBinding = 1;
+                descriptorWrites[1].dstArrayElement = 0;
+                descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                descriptorWrites[1].descriptorCount = 1;
+                descriptorWrites[1].pBufferInfo = nullptr;   // Optional
+                descriptorWrites[1].pImageInfo = &imageInfo;
+                descriptorWrites[1].pTexelBufferView = nullptr; // Optional
+
+                descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptorWrites[2].dstSet = descriptorSets[modelIndex][i];
+                descriptorWrites[2].dstBinding = 2;
+                descriptorWrites[2].dstArrayElement = 0;
+                descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                descriptorWrites[2].descriptorCount = 1;
+                descriptorWrites[2].pBufferInfo = &lightingBufferInfo;
+                descriptorWrites[2].pImageInfo = nullptr;
+                descriptorWrites[2].pTexelBufferView = nullptr;
+
+                vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            }
+            else
+            {
+                std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+                descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptorWrites[0].dstSet = descriptorSets[modelIndex][i];
+                descriptorWrites[0].dstBinding = 0;
+                descriptorWrites[0].dstArrayElement = 0;
+                descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                descriptorWrites[0].descriptorCount = 1;
+                descriptorWrites[0].pBufferInfo = &bufferInfo;
+                descriptorWrites[0].pImageInfo = nullptr; // Optional
+                descriptorWrites[0].pTexelBufferView = nullptr; // Optional
+
+                descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptorWrites[1].dstSet = descriptorSets[modelIndex][i];
+                descriptorWrites[1].dstBinding = 1;
+                descriptorWrites[1].dstArrayElement = 0;
+                descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                descriptorWrites[1].descriptorCount = 1;
+                descriptorWrites[1].pBufferInfo = nullptr;   // Optional
+                descriptorWrites[1].pImageInfo = &imageInfo;
+                descriptorWrites[1].pTexelBufferView = nullptr; // Optional
+
+                vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            }
         }
     }
 
