@@ -13,6 +13,8 @@ layout(binding = 2) uniform LightDataUBO {
     bool blinn;
 } lightData;
 
+layout(binding = 3) uniform sampler2D normalSampler;
+
 layout(location = 0) out vec4 outColor;
 
 void main()
@@ -24,7 +26,8 @@ void main()
 
     // diffuse
     vec3 lightDir = normalize(lightData.lightPos - fragPos);
-    vec3 normal = normalize(fragNorm);
+    // vec3 normal = normalize(fragNorm);
+    vec3 normal = normalize(texture(normalSampler, fragTexCoord).rgb);
     float diff = max(dot(lightDir, normal), 0.0f);
     vec3 diffuse = diff * color;
 
@@ -48,4 +51,5 @@ void main()
 
     // Output
     outColor = vec4(ambient + diffuse + specular, 1.0f);
+    // outColor = vec4(texture(normalSampler, fragTexCoord).rgb, 1.0f);
 }

@@ -79,6 +79,7 @@ const uint32_t HEIGHT = 600;
 
 const std::string MODEL_PATH = "models/viking_room.obj";
 const std::string TEXTURE_PATH = "textures/viking_room.png";
+const std::string NORMAL_PATH = "textures/viking_room_normal.png";
 const std::string SKYBOX_PATH = "textures/skybox/";
 const std::string MODELS_FOLDER = "models/";
 const std::string TEXTURES_FOLDER = "textures/";
@@ -343,16 +344,24 @@ private:
     std::vector<VkDeviceMemory> textureImageMemories;
     std::vector<VkImageView> textureImageViews;
     std::vector<VkSampler> textureSamplers;
+    std::vector<VkImage> normalImages;
+    std::vector<VkDeviceMemory> normalImageMemories;
+    std::vector<VkImageView> normalImageViews;
+    std::vector<VkSampler> normalSamplers;
     VkImage depthImage;
     VkDeviceMemory depthMemory;
     VkImageView depthImageView;
+    // PLACEHOLDERS
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
+    // Models
     std::vector<Model> models;
+    // Multisampling
     VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
     VkImage colorImage;
     VkDeviceMemory colorImageMemory;
     VkImageView colorImageView;
+    // Skybox images
     VkImage skyboxImage;
     VkDeviceMemory skyboxImageMemory;
     VkImageView skyboxImageView;
@@ -676,12 +685,18 @@ private:
         app->framebufferResized = true;
     }
 
-    void AddModel(const uint32_t pipelineIndex = 0, bool passLightingData = false, const char* modelFile = MODEL_PATH.c_str(), const char* textureFile = TEXTURE_PATH.c_str())
+    void LoadTexture(const uint32_t modelIndex, const char* file = TEXTURE_PATH.c_str(), bool isNormal = false)
+    {
+        CreateTextureImage(modelIndex, file, isNormal);
+        CreateTextureImageView(modelIndex, isNormal);
+        CreateTextureSampler(modelIndex, isNormal);
+    }
+
+    void AddModel(const uint32_t pipelineIndex = 0, bool passLightingData = false, const char* modelFile = MODEL_PATH.c_str(), const char* diffuseTextureFile = TEXTURE_PATH.c_str(), const char* normalTextureFile = NORMAL_PATH.c_str())
     {
         ImportModel(pipelineIndex, modelFile);
-        CreateTextureImage(models.size() - 1, textureFile);
-        CreateTextureImageView(models.size() - 1);
-        CreateTextureSampler(models.size() - 1);
+        LoadTexture(models.size() - 1, diffuseTextureFile);
+        LoadTexture(models.size() - 1, normalTextureFile, true);
         CreateVertexBuffer(models.size() - 1);
         CreateIndexBuffer(models.size() - 1);
         CreateUniformBuffers(models.size() - 1);
@@ -730,8 +745,8 @@ private:
 #ifdef USE_ASSIMP
         AddModel(2, true);
         //AddModel(0, false);
-        AddModel(0, false, "models/suzanne.obj", "textures/marble.png");
-        AddModel(1, false, "models/boy_animated.fbx", "textures/plaster.jpg");
+        AddModel(0, false, "models/suzanne.obj", "textures/marble.png", "textures/marble_normal.png");
+        AddModel(1, false, "models/boy_animated.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
         //AddModel(1, "models/wiggly.fbx", "textures/plaster.jpg");
         //AddModel(1, "models/bob_lamp.fbx", "textures/plaster.jpg");
         ////AddModel(1, "models/deer.fbx", "textures/plaster.jpg");
@@ -924,6 +939,14 @@ private:
             vkDestroySampler(device, textureSamplers[i], nullptr);
             vkDestroyImage(device, textureImages[i], nullptr);
             vkFreeMemory(device, textureImageMemories[i], nullptr);
+        }
+
+        for (size_t i = 0; i < normalImages.size(); i++)
+        {
+            vkDestroyImageView(device, normalImageViews[i], nullptr);
+            vkDestroySampler(device, normalSamplers[i], nullptr);
+            vkDestroyImage(device, normalImages[i], nullptr);
+            vkFreeMemory(device, normalImageMemories[i], nullptr);
         }
 
         vkDestroyImageView(device, skyboxImageView, nullptr);
@@ -2940,7 +2963,7 @@ private:
         uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
 
-        // Combined image sampler descriptor layout
+        // Combined image sampler descriptor layout for diffuse
         VkDescriptorSetLayoutBinding samplerLayoutBinding{};
         samplerLayoutBinding.binding = 1;
         samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -2956,7 +2979,15 @@ private:
         lightingUBOLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         lightingUBOLayoutBinding.pImmutableSamplers = nullptr; // Optional
 
-        std::array<VkDescriptorSetLayoutBinding, 3> bindings = { uboLayoutBinding, samplerLayoutBinding, lightingUBOLayoutBinding };
+        // Combined image sampler descriptor layout for normal
+        VkDescriptorSetLayoutBinding normalSamplerLayoutBinding{};
+        normalSamplerLayoutBinding.binding = 3;
+        normalSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        normalSamplerLayoutBinding.descriptorCount = 1;
+        normalSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        normalSamplerLayoutBinding.pImmutableSamplers = nullptr;
+
+        std::array<VkDescriptorSetLayoutBinding, 4> bindings = { uboLayoutBinding, samplerLayoutBinding, lightingUBOLayoutBinding, normalSamplerLayoutBinding };
 
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -3173,16 +3204,19 @@ private:
     {
         descriptorPools.resize(descriptorPools.size() + 1);
 
-        std::array<VkDescriptorPoolSize, 3> poolSizes;
+        std::array<VkDescriptorPoolSize, 4> poolSizes;
         // UBO
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-        // Sampler
+        // Diffuse Sampler
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
         // LightData UBO
         poolSizes[2].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        // Normal Sampler
+        poolSizes[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSizes[3].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -3246,7 +3280,13 @@ private:
                 lightingBufferInfo.offset = 0;
                 lightingBufferInfo.range = sizeof(LightDataUBO);
 
-                std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
+                // Normal map sampler
+                VkDescriptorImageInfo normalImageInfo{};
+                normalImageInfo.sampler = normalSamplers[modelIndex];
+                normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                normalImageInfo.imageView = normalImageViews[modelIndex];
+
+                std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
                 descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
                 descriptorWrites[0].dstSet = descriptorSets[modelIndex][i];
                 descriptorWrites[0].dstBinding = 0;
@@ -3276,6 +3316,16 @@ private:
                 descriptorWrites[2].pBufferInfo = &lightingBufferInfo;
                 descriptorWrites[2].pImageInfo = nullptr;
                 descriptorWrites[2].pTexelBufferView = nullptr;
+
+                descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptorWrites[3].dstSet = descriptorSets[modelIndex][i];
+                descriptorWrites[3].dstBinding = 3;
+                descriptorWrites[3].dstArrayElement = 0;
+                descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                descriptorWrites[3].descriptorCount = 1;
+                descriptorWrites[3].pBufferInfo = nullptr;
+                descriptorWrites[3].pImageInfo = &normalImageInfo;
+                descriptorWrites[3].pTexelBufferView = nullptr;
 
                 vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
             }
@@ -3361,7 +3411,7 @@ private:
         }
     }
 
-    void CreateTextureImage(const size_t modelIndex, const char* file = TEXTURE_PATH.c_str())
+    void CreateTextureImage(const size_t modelIndex, const char* file = TEXTURE_PATH.c_str(), bool isNormal = false)
     {
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load(file, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -3386,20 +3436,40 @@ private:
 
         stbi_image_free(pixels);
 
-        textureImages.resize(textureImages.size() + 1);
-        textureImageMemories.resize(textureImageMemories.size() + 1);
+        if (isNormal)
+        {
+            normalImages.resize(normalImages.size() + 1);
+            normalImageMemories.resize(normalImageMemories.size() + 1);
 
-        CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            textureImages[modelIndex], textureImageMemories[modelIndex]);
+            CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                normalImages[modelIndex], normalImageMemories[modelIndex]);
 
-        TransitionImageLayout(textureImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+            TransitionImageLayout(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
-        CopyBufferToImage(stagingBuffer, textureImages[modelIndex], static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+            CopyBufferToImage(stagingBuffer, normalImages[modelIndex], static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
-        //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+            //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
-        GenerateMipmaps(textureImages[modelIndex], VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+            GenerateMipmaps(normalImages[modelIndex], VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+        }
+        else
+        {
+            textureImages.resize(textureImages.size() + 1);
+            textureImageMemories.resize(textureImageMemories.size() + 1);
+
+            CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                textureImages[modelIndex], textureImageMemories[modelIndex]);
+
+            TransitionImageLayout(textureImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+
+            CopyBufferToImage(stagingBuffer, textureImages[modelIndex], static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+
+            //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+
+            GenerateMipmaps(textureImages[modelIndex], VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+        }
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
@@ -3803,11 +3873,18 @@ private:
         EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue);
     }
 
-    void CreateTextureImageView(const size_t modelIndex)
+    void CreateTextureImageView(const size_t modelIndex, bool isNormal = false)
     {
-        textureImageViews.resize(textureImageViews.size() + 1);
-        textureImageViews[modelIndex] = CreateImageView(textureImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-
+        if (isNormal)
+        {
+            normalImageViews.resize(normalImageViews.size() + 1);
+            normalImageViews[modelIndex] = CreateImageView(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+        }
+        else
+        {
+            textureImageViews.resize(textureImageViews.size() + 1);
+            textureImageViews[modelIndex] = CreateImageView(textureImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+        }
     }
 
     VkImageView CreateImageView(VkImage image, uint32_t mipLevels, VkFormat format, VkImageAspectFlags aspectFlags, VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D, uint32_t layerCount = 1)
@@ -3830,7 +3907,7 @@ private:
         return imageView;
     }
 
-    void CreateTextureSampler(const size_t modelIndex)
+    void CreateTextureSampler(const size_t modelIndex, bool isNormal = false)
     {
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -3860,10 +3937,20 @@ private:
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = static_cast<float>(mipLevels);
 
-        textureSamplers.resize(textureSamplers.size() + 1);
+        if (isNormal)
+        {
+            normalSamplers.resize(normalSamplers.size() + 1);
 
-        if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSamplers[modelIndex]) != VK_SUCCESS)
-            throw std::runtime_error("failed to create sampler!");
+            if (vkCreateSampler(device, &samplerInfo, nullptr, &normalSamplers[modelIndex]) != VK_SUCCESS)
+                throw std::runtime_error("failed to create sampler!");
+        }
+        else
+        {
+            textureSamplers.resize(textureSamplers.size() + 1);
+
+            if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSamplers[modelIndex]) != VK_SUCCESS)
+                throw std::runtime_error("failed to create sampler!");
+        }
     }
     
     void CreateDepthResources()
