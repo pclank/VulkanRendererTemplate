@@ -159,7 +159,7 @@ struct Model {
 
         // TODO: Switching between animations can be added!
 
-        std::vector<glm::mat4> bone_transforms;                     // Vector to be passed to vertex shader, containing all bone transforms
+        std::vector<glm::mat4> bone_transforms(mesh.boneCounter);                     // Vector to be passed to vertex shader, containing all bone transforms
 
         glm::mat4 initial_matrix = glm::mat4(1.0f);
 
