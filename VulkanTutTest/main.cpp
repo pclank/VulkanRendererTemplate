@@ -3441,17 +3441,17 @@ private:
             normalImages.resize(normalImages.size() + 1);
             normalImageMemories.resize(normalImageMemories.size() + 1);
 
-            CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+            CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 normalImages[modelIndex], normalImageMemories[modelIndex]);
 
-            TransitionImageLayout(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+            TransitionImageLayout(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
             CopyBufferToImage(stagingBuffer, normalImages[modelIndex], static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
-            //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+            //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
-            GenerateMipmaps(normalImages[modelIndex], VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+            GenerateMipmaps(normalImages[modelIndex], VK_FORMAT_R8G8B8A8_UNORM, texWidth, texHeight, mipLevels);
         }
         else
         {
@@ -3878,7 +3878,7 @@ private:
         if (isNormal)
         {
             normalImageViews.resize(normalImageViews.size() + 1);
-            normalImageViews[modelIndex] = CreateImageView(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+            normalImageViews[modelIndex] = CreateImageView(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
         }
         else
         {
