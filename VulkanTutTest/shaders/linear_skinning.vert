@@ -53,5 +53,5 @@ void main()
     // fragNorm = vec3(inBoneWeights.x, inBoneWeights.y, inBoneWeights.z);
     fragColor = inColor;
     fragTexCoord = inTexCoord;
-    fragPos = inPos;
+    fragPos = newPosition.xyz;
 }

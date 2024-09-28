@@ -57,7 +57,7 @@ struct GUI {
         ImGui::SliderFloat("Suzanne scale", &test_scale, 0.1f, 5.0f, "%.2f");
         ImGui::SliderFloat("Animated model scale", &animated_scale, 0.1f, 5.0f, "%.2f");*/
         ImGui::Separator();
-        ImGui::SliderFloat3("Light position", light_pos, -10.0f, 10.0f, "%.2f");
+        ImGui::SliderFloat3("Light position", light_pos, -50.0f, 50.0f, "%.2f");
         ImGui::Checkbox("Blinn mode", &blinn_flag);
         ImGui::Separator();
         ImGui::Checkbox("Wireframe rendering", &wireframe_flag);
