@@ -238,8 +238,7 @@ inline glm::quat Assimp2GLMQUAT(aiQuaternion& src)
 Camera cam = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 Timer timer;
 GUI gui = GUI(&cam, &timer);
-//AnimationPlayer animPlayer = AnimationPlayer(0, nullptr);
-AnimationPlayer animPlayer;
+AnimationPlayer animPlayer = AnimationPlayer(0, nullptr, 0);
 
 // Callbacks
 void MouseMovementCallback(GLFWwindow* window, double x_pos, double y_pos);
@@ -487,9 +486,8 @@ private:
         models.push_back(model);
 
         // Map to Animation Player
-        //if (!model.meshes[0].animations.empty() && animPlayer.tgt_model == nullptr)
-        if (!model.meshes[0].animations.empty())
-            animPlayer.SetValues(0, models.back());
+        if (!model.meshes[0].animations.empty() && animPlayer.tgt_model == nullptr)
+            animPlayer.SetValues(0, &models.back(), models.size() - 1);
     }
 
     void ExtractBoneWeightForVertices(std::vector<Vertex>& vertices, const aiMesh* mesh, const aiScene* scene, Model& model)
@@ -3114,7 +3112,7 @@ private:
             ubo.model = glm::rotate(ubo.model, time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         }
 
-        if (modelIndex == 3)
+        if (modelIndex == animPlayer.modelIndex)
             ubo.model = glm::scale(glm::mat4(1.0f), glm::vec3(gui.animated_scale));
 
 #endif // ENABLE_CAMERA_ANIM
@@ -3122,7 +3120,7 @@ private:
 
         // Animate model
         // TODO: Add better logic!
-        if (modelIndex == 3 && !animPlayer.tgt_model.meshes[0].animations.empty())
+        if (modelIndex == animPlayer.modelIndex && !animPlayer.tgt_model->meshes[0].animations.empty())
         {
             animPlayer.is_playing = gui.play_animation_flag;
 
@@ -3138,9 +3136,9 @@ private:
 
             std::vector<glm::mat4> boneTranforms;
             if (gui.cubic_interpolation_flag)
-                boneTranforms = animPlayer.tgt_model.AnimateCI(animPlayer.animation_time, &skeletonBones);
+                boneTranforms = animPlayer.tgt_model->AnimateCI(animPlayer.animation_time, &skeletonBones);
             else
-                boneTranforms = animPlayer.tgt_model.AnimateLI(animPlayer.animation_time, &skeletonBones);
+                boneTranforms = animPlayer.tgt_model->AnimateLI(animPlayer.animation_time, &skeletonBones);
             memcpy(ubo.boneTransforms, boneTranforms.data(), boneTranforms.size() * sizeof(glm::mat4));
         }
 
