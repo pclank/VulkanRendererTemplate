@@ -172,6 +172,15 @@ const std::vector<Vertex> vertices = {
 const std::vector<uint16_t> indices = { 0, 1, 2, 2, 3, 0,
                                         4, 5, 6, 6, 7, 4};
 
+const std::vector<Vertex> gridVertices = {
+    {{1.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{-1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+};
+
+const std::vector<uint16_t> gridIndices = {0, 1, 2, 1, 3, 2};
+
 // Global Functions
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
@@ -276,8 +285,10 @@ private:
     std::vector<VkImageView> swapChainImageViews;
     VkRenderPass renderPass;
     VkRenderPass imguiRenderPass;
+    // Descriptor set layouts
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorSetLayout lightingDataDescriptorSetLayout;
+    VkDescriptorSetLayout gridDescriptorSetLayout;
     // Graphics Pipelines
     std::vector<VkPipelineLayout> pipelineLayouts;
     std::vector<VkPipeline> graphicsPipelines;
@@ -289,6 +300,8 @@ private:
     VkPipeline skyboxGraphicsPipeline;
     VkPipelineLayout skyboxWireframePipelineLayout;
     VkPipeline skyboxWireframeGraphicsPipeline;
+    VkPipelineLayout gridPipelineLayout;
+    VkPipeline gridGraphicsPipeline;
     // Frame buffers
     std::vector<VkFramebuffer> swapChainFramebuffers;
     std::vector<VkFramebuffer> imguiFramebuffers;
@@ -312,6 +325,10 @@ private:
     std::vector<VkDeviceMemory> indexBufferMemories;
     VkBuffer skyboxVertexBuffer;
     VkDeviceMemory skyboxVertexBufferMemory;
+    VkBuffer gridVertexBuffer;
+    VkDeviceMemory gridVertexBufferMemory;
+    VkBuffer gridIndexBuffer;
+    VkDeviceMemory gridIndexBufferMemory;
     /*std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
     std::vector<void*> uniformBuffersMapped;*/
@@ -325,15 +342,20 @@ private:
     std::vector<VkBuffer> skyboxUniformBuffers;
     std::vector<VkDeviceMemory> skyboxUniformBuffersMemory;
     std::vector<void*> skyboxUniformBuffersMapped;
+    std::vector<VkBuffer> gridUniformBuffers;
+    std::vector<VkDeviceMemory> gridUniformBuffersMemory;
+    std::vector<void*> gridUniformBuffersMapped;
     //VkDescriptorPool descriptorPool;
     // Descriptors
     std::vector<VkDescriptorPool> descriptorPools;
     VkDescriptorPool imguiDescriptorPool;
     VkDescriptorPool skyboxDescriptorPool;
     VkDescriptorPool lightingDescriptorPool;
+    VkDescriptorPool gridDescriptorPool;
     //std::vector<VkDescriptorSet> descriptorSets;
     std::vector<std::vector<VkDescriptorSet>> descriptorSets;
     std::vector<VkDescriptorSet> skyboxDescriptorSet;
+    std::vector<VkDescriptorSet> gridDescriptorSet;
     uint32_t mipLevels;
     /*VkImage textureImage;
     VkDeviceMemory textureImageMemory;
@@ -724,6 +746,15 @@ private:
         CreateSkyboxDescriptorSet();
     }
 
+    void AddGrid()
+    {
+        CreateGridVertexBuffer();
+        CreateGridIndexBuffer();
+        CreateGridUniformBuffer();
+        CreateGridDescriptorPool();
+        CreateGridDescriptorSet();
+    }
+
     void InitVulkan()
     {
         CreateInstance();
@@ -736,11 +767,13 @@ private:
         CreateRenderPass();
         CreateDescriptorSetLayout();
         CreateLightingDataDescriptorSetLayout();
+        CreateGridDescriptorSetLayout();
         CreateGraphicsPipeline();
         CreateGraphicsPipeline("shaders/linear_skinning_vert.spv", "shaders/linear_skinning_frag.spv", true);
         CreateGraphicsPipeline("shaders/blinn_phong_vert.spv", "shaders/blinn_phong_frag.spv", true);
         CreateSkyboxGraphicsPipeline("shaders/skybox_vert.spv", "shaders/skybox_frag.spv");
         CreateSkyboxWireframeGraphicsPipeline();
+        CreateGridGraphicsPipeline();
         CreateCommandPools();
         CreateColorResources();
         CreateDepthResources();
@@ -750,7 +783,8 @@ private:
         AddModel(0, false, "models/suzanne.obj", "textures/marble.png", "textures/marble_normal.png");
         //AddModel(1, false, "models/wiggly.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
         AddModel(2, true, "models/wicker_basket_02_2k.fbx", "models/textures/wicker_basket_02_diff_2k.jpg", "models/textures/wicker_basket_02_nor_dx_2k.png");
-        AddModel(1, true, "models/flair_edited.fbx", "textures/body_diffuse.png", "textures/body_normal.png");
+        //AddModel(1, true, "models/flair_edited.fbx", "textures/body_diffuse.png", "textures/body_normal.png");
+        AddModel(1, true, "models/ymca.fbx", "textures/parasiteZombie_body_diffuse.png", "textures/parasiteZombie_body_normal.bmp");
         // AddModel(1, false, "models/boy_animated.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
         //AddModel(1, "models/bob_lamp.fbx", "textures/plaster.jpg");
         //AddModel(1, "models/deer.fbx", "textures/plaster.jpg");
@@ -772,6 +806,7 @@ private:
         gui.Setup();
         //AddSkybox();
         AddSkybox("textures/Yokohama3/");
+        AddGrid();
         CreateCommandBuffers();
         CreateSyncObjects();
     }
@@ -827,6 +862,9 @@ private:
 
         // Update skybox uniform buffer
         UpdateSkyboxUniformBuffer(currentFrame);
+
+        // Update grid uniform buffer
+        UpdateGridUniformBuffer(currentFrame);
 
         // Submit command buffer
         VkSubmitInfo submitInfo{};
@@ -904,6 +942,8 @@ private:
         vkDestroyPipelineLayout(device, skyboxWireframePipelineLayout, nullptr);
         vkDestroyPipeline(device, animatedWireframeGraphicsPipeline, nullptr);
         vkDestroyPipelineLayout(device, animatedWireframePipelineLayout, nullptr);
+        vkDestroyPipeline(device, gridGraphicsPipeline, nullptr);
+        vkDestroyPipelineLayout(device, gridPipelineLayout, nullptr);
 
         vkDestroyRenderPass(device, renderPass, nullptr);
         vkDestroyRenderPass(device, imguiRenderPass, nullptr);
@@ -930,6 +970,12 @@ private:
         {
             vkDestroyBuffer(device, skyboxUniformBuffers[i], nullptr);
             vkFreeMemory(device, skyboxUniformBuffersMemory[i], nullptr);
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            vkDestroyBuffer(device, gridUniformBuffers[i], nullptr);
+            vkFreeMemory(device, gridUniformBuffersMemory[i], nullptr);
         }
 
         for (size_t i = 0; i < lightingUniformBuffers.size(); i++)
@@ -968,8 +1014,10 @@ private:
         vkDestroyDescriptorPool(device, imguiDescriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
         vkDestroyDescriptorSetLayout(device, lightingDataDescriptorSetLayout, nullptr);
+        vkDestroyDescriptorSetLayout(device, gridDescriptorSetLayout, nullptr);
 
         vkDestroyDescriptorPool(device, skyboxDescriptorPool, nullptr);
+        vkDestroyDescriptorPool(device, gridDescriptorPool, nullptr);
         vkDestroyDescriptorPool(device, lightingDescriptorPool, nullptr);
         
         // Clear all vertex and index buffers and memories
@@ -983,6 +1031,10 @@ private:
 
         vkDestroyBuffer(device, skyboxVertexBuffer, nullptr);
         vkFreeMemory(device, skyboxVertexBufferMemory, nullptr);
+        vkDestroyBuffer(device, gridVertexBuffer, nullptr);
+        vkFreeMemory(device, gridVertexBufferMemory, nullptr);
+        vkDestroyBuffer(device, gridIndexBuffer, nullptr);
+        vkFreeMemory(device, gridIndexBufferMemory, nullptr);
 
         vkDestroyDevice(device, nullptr);
 
@@ -2408,6 +2460,175 @@ private:
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
 
+    void CreateGridGraphicsPipeline(const char* vertShaderFile = "shaders/grid_vert.spv", const char* fragShaderFile = "shaders/grid_frag.spv")
+    {
+        auto vertShaderCode = ReadFile(vertShaderFile);
+        auto fragShaderCode = ReadFile(fragShaderFile);
+
+        VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
+        VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
+
+        // Vertex shader to pipeline
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName = "main";
+
+        // Fragment shader to pipeline
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+        // Dynamic state
+        std::vector<VkDynamicState> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        };
+
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.scissorCount = 1;
+
+        // Vertices
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        auto bindingDescription = Vertex::GetBindingDescription();
+        auto attributeDescriptions = Vertex::GetAttributeDescriptions();
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(Vertex::GetAttributeDescriptions().size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+        // Input assembly
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        // Viewport
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float)swapChainExtent.width;
+        viewport.height = (float)swapChainExtent.height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        // Scissor
+        VkRect2D scissor{};
+        scissor.offset = { 0, 0 };
+        scissor.extent = swapChainExtent;
+
+        // Rasterizer
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.lineWidth = 1.0f;
+        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterizer.depthBiasEnable = VK_FALSE;
+        rasterizer.depthBiasConstantFactor = 0.0f; // Optional
+        rasterizer.depthBiasClamp = 0.0f; // Optional
+        rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
+
+        // Multisampling
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.sampleShadingEnable = VK_TRUE;
+        multisampling.rasterizationSamples = msaaSamples;
+        multisampling.minSampleShading = 0.2f; // Optional
+        multisampling.pSampleMask = nullptr; // Optional
+        multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
+        multisampling.alphaToOneEnable = VK_FALSE; // Optional
+
+        // Depth & Stencil testing
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        /*depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;*/
+        depthStencil.depthTestEnable = VK_FALSE;
+        depthStencil.depthWriteEnable = VK_FALSE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+        depthStencil.depthBoundsTestEnable = VK_FALSE;
+        depthStencil.minDepthBounds = 0.0f; // Optional
+        depthStencil.maxDepthBounds = 1.0f; // Optional
+        depthStencil.stencilTestEnable = VK_FALSE;
+        depthStencil.front = {}; // Optional
+        depthStencil.back = {}; // Optional
+
+        // Color blending
+        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_TRUE;
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
+        colorBlending.attachmentCount = 1;
+        colorBlending.pAttachments = &colorBlendAttachment;
+        colorBlending.blendConstants[0] = 0.0f; // Optional
+        colorBlending.blendConstants[1] = 0.0f; // Optional
+        colorBlending.blendConstants[2] = 0.0f; // Optional
+        colorBlending.blendConstants[3] = 0.0f; // Optional
+
+        // Create pipeline layout
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &gridDescriptorSetLayout;
+        pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
+        pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &gridPipelineLayout) != VK_SUCCESS)
+            throw std::runtime_error("failed to create pipeline layout!");
+
+        // Create pipeline
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState;
+        pipelineInfo.layout = gridPipelineLayout;
+        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.subpass = 0;
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
+        pipelineInfo.basePipelineIndex = -1; // Optional
+
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &gridGraphicsPipeline) != VK_SUCCESS)
+            throw std::runtime_error("failed to create graphics pipeline!");
+
+        vkDestroyShaderModule(device, fragShaderModule, nullptr);
+        vkDestroyShaderModule(device, vertShaderModule, nullptr);
+    }
+
     void CreateRenderPass()
     {
         // Color attachment
@@ -2714,6 +2935,36 @@ private:
             vkCmdDraw(commandBuffer, static_cast<uint32_t>(108), 1, 0, 0);
         }
 
+        // Render grid
+        if (gui.grid_flag)
+        {
+            // Bind graphics pipeline
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gridGraphicsPipeline);
+
+            VkBuffer vertexBuffersRend[] = { gridVertexBuffer };
+            VkDeviceSize offsets[] = { 0 };
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersRend, offsets);
+            vkCmdBindIndexBuffer(commandBuffer, gridIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(swapChainExtent.width);
+            viewport.height = static_cast<float>(swapChainExtent.height);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+            VkRect2D scissor{};
+            scissor.offset = { 0, 0 };
+            scissor.extent = swapChainExtent;
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gridPipelineLayout, 0, 1, gridDescriptorSet.data(), 0, nullptr);
+
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(gridIndices.size()), 1, 0, 0, 0);
+        }
+
         // Render models
         for (size_t i = 0; i < models.size(); i++)
         {
@@ -2903,6 +3154,31 @@ private:
         }
     }
 
+    void CreateGridIndexBuffer()
+    {
+        VkDeviceSize bufferSize = sizeof(gridIndices[0]) * gridIndices.size();
+
+        // Staging buffer
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer, stagingBufferMemory);
+
+        // Map memory
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        memcpy(data, gridIndices.data(), static_cast<size_t>(bufferSize));
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        CreateBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            gridIndexBuffer, gridIndexBufferMemory);
+
+        CopyBuffer(stagingBuffer, gridIndexBuffer, bufferSize);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
     void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize bufferSize)
     {
         VkCommandBuffer commandBuffer = BeginSingleTimeCommands(transCommandPool);
@@ -2955,6 +3231,31 @@ private:
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
+    void CreateGridVertexBuffer()
+    {
+        VkDeviceSize bufferSize = sizeof(Vertex) * gridVertices.size();
+
+        // Staging buffer
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer, stagingBufferMemory);
+
+        // Map memory
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        memcpy(data, gridVertices.data(), static_cast<size_t>(bufferSize));
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        CreateBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            gridVertexBuffer, gridVertexBufferMemory);
+
+        CopyBuffer(stagingBuffer, gridVertexBuffer, bufferSize);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
     void CreateDescriptorSetLayout()
     {
         // UBO descriptor layout
@@ -2981,6 +3282,25 @@ private:
         layoutInfo.pBindings = bindings.data();
 
         if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
+            throw std::runtime_error("failed to create descriptor set layout!");
+    }
+
+    void CreateGridDescriptorSetLayout()
+    {
+        // UBO descriptor layout
+        VkDescriptorSetLayoutBinding uboLayoutBinding{};
+        uboLayoutBinding.binding = 0;
+        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBinding.descriptorCount = 1;
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &uboLayoutBinding;
+
+        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &gridDescriptorSetLayout) != VK_SUCCESS)
             throw std::runtime_error("failed to create descriptor set layout!");
     }
 
@@ -3063,6 +3383,23 @@ private:
 
             // Persistent mapping
             vkMapMemory(device, skyboxUniformBuffersMemory[i], 0, bufferSize, 0, &skyboxUniformBuffersMapped[i]);
+        }
+    }
+
+    void CreateGridUniformBuffer()
+    {
+        VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+        gridUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        gridUniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+        gridUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                gridUniformBuffers[i], gridUniformBuffersMemory[i]);
+
+            // Persistent mapping
+            vkMapMemory(device, gridUniformBuffersMemory[i], 0, bufferSize, 0, &gridUniformBuffersMapped[i]);
         }
     }
 
@@ -3178,6 +3515,20 @@ private:
         memcpy(lightingUniformBuffersMapped[0][currentFrame], &lightUBO, sizeof(lightUBO));
     }
 
+    void UpdateGridUniformBuffer(uint32_t currentFrame)
+    {
+        UniformBufferObject ubo{};
+
+        ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        ubo.model = glm::scale(ubo.model, glm::vec3(10.0f));
+        ubo.proj = cam.GetCurrentProjectionMatrix(swapChainExtent.width, swapChainExtent.height);
+        ubo.view = cam.GetCurrentViewMatrix();
+
+        ubo.proj[1][1] *= -1;   // Flip sign of scaling factor
+
+        memcpy(gridUniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+    }
+
     void CreateDescriptorPool(const size_t modelIndex)
     {
         descriptorPools.resize(descriptorPools.size() + 1);
@@ -3235,6 +3586,24 @@ private:
         //poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &skyboxDescriptorPool) != VK_SUCCESS)
+            throw std::runtime_error("failed to create descriptor pool!");
+    }
+
+    void CreateGridDescriptorPool()
+    {
+        std::array<VkDescriptorPoolSize, 1> poolSizes;
+        // UBO
+        poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        //poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &gridDescriptorPool) != VK_SUCCESS)
             throw std::runtime_error("failed to create descriptor pool!");
     }
 
@@ -3444,6 +3813,44 @@ private:
             descriptorWrites[1].pBufferInfo = nullptr;   // Optional
             descriptorWrites[1].pImageInfo = &imageInfo;
             descriptorWrites[1].pTexelBufferView = nullptr; // Optional
+
+            vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+        }
+    }
+
+    void CreateGridDescriptorSet()
+    {
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, gridDescriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = gridDescriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        allocInfo.pSetLayouts = layouts.data();
+
+        gridDescriptorSet.resize(static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
+
+        if (vkAllocateDescriptorSets(device, &allocInfo, gridDescriptorSet.data()) != VK_SUCCESS)
+            throw std::runtime_error("failed to allocate descriptor sets!");
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            // UBO
+            VkDescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = gridUniformBuffers[i];
+            bufferInfo.offset = 0;
+            bufferInfo.range = sizeof(UniformBufferObject);
+
+            // Update configurations
+            std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = gridDescriptorSet[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].dstArrayElement = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pBufferInfo = &bufferInfo;
+            descriptorWrites[0].pImageInfo = nullptr; // Optional
+            descriptorWrites[0].pTexelBufferView = nullptr; // Optional
 
             vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }

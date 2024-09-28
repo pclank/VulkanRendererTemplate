@@ -21,6 +21,7 @@ struct GUI {
     bool play_animation_flag = false;
     bool blinn_flag = false;
     bool cubic_interpolation_flag = false;
+    bool grid_flag = false;
 	float lastX = 0.0f;
 	float lastY = 0.0f;
     Camera* cam;
@@ -61,6 +62,7 @@ struct GUI {
         ImGui::Separator();
         ImGui::Checkbox("Wireframe rendering", &wireframe_flag);
         ImGui::Checkbox("Skybox rendering", &skybox_flag);
+        ImGui::Checkbox("Grid rendering", &grid_flag);
         ImGui::Separator();
         ImGui::SliderFloat("Animation speed", &animation_speed, 0.1f, 2.0f, "%.2f");
         ImGui::Checkbox("Cubic interpolation", &cubic_interpolation_flag);
@@ -80,7 +82,7 @@ struct GUI {
             ImGui::TextColored(ImVec4(1, 1, 0, 1), strIndex.c_str());
             ImGui::Checkbox(strEnabled.c_str(), &models[i].enabled);
             ImGui::SliderFloat3(strTranslation.c_str(), model_translations[i].data(), -10.0f, 10.0f, "%.2f");
-            ImGui::SliderFloat(strScale.c_str(), &model_scales[i], 0.1f, 5.0f, "%.02f");
+            ImGui::SliderFloat(strScale.c_str(), &model_scales[i], 0.01f, 5.0f, "%.02f");
         }
         ImGui::End();
 
