@@ -43,9 +43,15 @@ public:
 		return fpss.data();
 	}
 
+	inline float* GetDeltas()
+	{
+		return deltas.data();
+	}
+
 private:
 	double m_prevTime;
 	double m_currentTime;
 	std::vector<float> fpss;
+	std::vector<float> deltas;
 	TimeData m_timeData;
 };

@@ -23,6 +23,7 @@ layout(location = 5) in vec4 inBoneWeights;
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
 layout(location = 2) out vec3 fragNorm;
+layout(location = 3) out vec3 fragPos;
 
 void main()
 {
@@ -52,4 +53,5 @@ void main()
     // fragNorm = vec3(inBoneWeights.x, inBoneWeights.y, inBoneWeights.z);
     fragColor = inColor;
     fragTexCoord = inTexCoord;
+    fragPos = inPos;
 }

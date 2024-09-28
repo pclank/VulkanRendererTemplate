@@ -6,9 +6,11 @@ enum GUI_BUTTON {
 };
 
 struct GUI {
-	float test_translation[3] = { 0.0f };
+	//float test_translation[3] = { 0.0f };
+	//float test_scale = 1.0f;
     float light_pos[3] = { 0.0f, 5.0f, 1.0f };
-	float test_scale = 1.0f;
+    std::vector<float> model_scales;
+    std::vector<std::array<float, 3>> model_translations;
     float animated_scale = 1.0f;
     float animation_speed = 1.0f;
 	bool spacebar_down = false;
@@ -28,6 +30,12 @@ struct GUI {
 
     GUI(Camera* cam, Timer* timer) : cam(cam), timer(timer) {}
 
+    void Setup()
+    {
+        model_scales = std::vector<float>(nModels, 1.0f);
+        model_translations.resize(nModels);
+    }
+
 	void Render()
 	{
         // Start the Dear ImGui frame
@@ -36,16 +44,17 @@ struct GUI {
         ImGui::NewFrame();
         ImGui::Begin("Your friendly (???) Vulkan renderer");
         ImGui::Text("FPS: %.2f", timer->GetData().FPS);
-        ImGui::PlotLines("FPS", timer->GetFPSS(), FPS_SAMPLES);
+        //ImGui::PlotLines("FPS", timer->GetFPSS(), FPS_SAMPLES);
+        ImGui::PlotLines("ms", timer->GetDeltas(), FPS_SAMPLES);
         ImGui::Separator();
         ImGui::Text("Campos: %.2f, %.2f, %.2f", cam->position.x, cam->position.y, cam->position.z);
         ImGui::Checkbox("Arcball mode", &cam->arcball_mode);
         ImGui::SliderFloat("Camera sensitivity", &cam->look_sensitivity, 0.1f, 5.0f, "%.1f");
         ImGui::SliderFloat("Camera speed", &cam->movement_speed, 0.1f, 15.0f, "%.1f");
-        ImGui::Separator();
+        /*ImGui::Separator();
         ImGui::SliderFloat3("Suzanne translation", test_translation, -10.0f, 10.0f, "%.2f");
         ImGui::SliderFloat("Suzanne scale", &test_scale, 0.1f, 5.0f, "%.2f");
-        ImGui::SliderFloat("Animated model scale", &animated_scale, 0.1f, 5.0f, "%.2f");
+        ImGui::SliderFloat("Animated model scale", &animated_scale, 0.1f, 5.0f, "%.2f");*/
         ImGui::Separator();
         ImGui::SliderFloat3("Light position", light_pos, -10.0f, 10.0f, "%.2f");
         ImGui::Checkbox("Blinn mode", &blinn_flag);
@@ -64,8 +73,14 @@ struct GUI {
         ImGui::Separator();
         for (size_t i = 0; i < nModels; i++)
         {
-            const std::string str = std::string("Model ") + std::to_string(i) + " enabled";
-            ImGui::Checkbox(str.c_str(), &models[i].enabled);
+            const std::string strIndex = std::string("Model ") + std::to_string(i);
+            const std::string strEnabled = std::string("Model ") + std::to_string(i) + " enabled";
+            const std::string strTranslation = std::string("Model ") + std::to_string(i) + " translation";
+            const std::string strScale = std::string("Model ") + std::to_string(i) + " scaling";
+            ImGui::TextColored(ImVec4(1, 1, 0, 1), strIndex.c_str());
+            ImGui::Checkbox(strEnabled.c_str(), &models[i].enabled);
+            ImGui::SliderFloat3(strTranslation.c_str(), model_translations[i].data(), -10.0f, 10.0f, "%.2f");
+            ImGui::SliderFloat(strScale.c_str(), &model_scales[i], 0.1f, 5.0f, "%.02f");
         }
         ImGui::End();
 

@@ -737,7 +737,7 @@ private:
         CreateDescriptorSetLayout();
         CreateLightingDataDescriptorSetLayout();
         CreateGraphicsPipeline();
-        CreateGraphicsPipeline("shaders/linear_skinning_vert.spv", "shaders/linear_skinning_frag.spv");
+        CreateGraphicsPipeline("shaders/linear_skinning_vert.spv", "shaders/linear_skinning_frag.spv", true);
         CreateGraphicsPipeline("shaders/blinn_phong_vert.spv", "shaders/blinn_phong_frag.spv", true);
         CreateSkyboxGraphicsPipeline("shaders/skybox_vert.spv", "shaders/skybox_frag.spv");
         CreateSkyboxWireframeGraphicsPipeline();
@@ -750,9 +750,10 @@ private:
         AddModel(0, false, "models/suzanne.obj", "textures/marble.png", "textures/marble_normal.png");
         //AddModel(1, false, "models/wiggly.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
         AddModel(2, true, "models/wicker_basket_02_2k.fbx", "models/textures/wicker_basket_02_diff_2k.jpg", "models/textures/wicker_basket_02_nor_dx_2k.png");
-        AddModel(1, false, "models/boy_animated.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
+        AddModel(1, true, "models/flair_edited.fbx", "textures/body_diffuse.png", "textures/body_normal.png");
+        // AddModel(1, false, "models/boy_animated.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
         //AddModel(1, "models/bob_lamp.fbx", "textures/plaster.jpg");
-        ////AddModel(1, "models/deer.fbx", "textures/plaster.jpg");
+        //AddModel(1, "models/deer.fbx", "textures/plaster.jpg");
         //AddModel(1, "models/female_doctor.fbx", "textures/plaster.jpg");
 #else
         LoadModel();
@@ -765,9 +766,10 @@ private:
         CreateDescriptorPool();
         CreateDescriptorSets();
 #endif // USE_ASSIMP
-        CreateAnimatedWireframeGraphicsPipeline();
+        CreateAnimatedWireframeGraphicsPipeline("shaders/linear_skinning_vert.spv", "shaders/linear_skinning_frag.spv", true);
         gui.nModels = models.size();
         gui.models = models.data();
+        gui.Setup();
         //AddSkybox();
         AddSkybox("textures/Yokohama3/");
         CreateCommandBuffers();
@@ -2235,7 +2237,7 @@ private:
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
 
-    void CreateAnimatedWireframeGraphicsPipeline(const char* vertShaderFile = "shaders/linear_skinning_vert.spv", const char* fragShaderFile = "shaders/linear_skinning_frag.spv")
+    void CreateAnimatedWireframeGraphicsPipeline(const char* vertShaderFile = "shaders/linear_skinning_vert.spv", const char* fragShaderFile = "shaders/linear_skinning_frag.spv", bool passLightingData = false)
     {
         auto vertShaderCode = ReadFile(vertShaderFile);
         auto fragShaderCode = ReadFile(fragShaderFile);
@@ -2369,7 +2371,11 @@ private:
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+        if (passLightingData)
+            pipelineLayoutInfo.pSetLayouts = &lightingDataDescriptorSetLayout;
+        else
+            pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+        //pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
         pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
         pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
@@ -3094,11 +3100,16 @@ private:
         ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);   // without swapChainExtent we get wrong aspect ratio if resize happens
 #else
-        ubo.model = glm::rotate(
-            glm::rotate(glm::mat4(1.0f),  glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f))
-            , glm::radians(-90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.proj = cam.GetCurrentProjectionMatrix(swapChainExtent.width, swapChainExtent.height);
         ubo.view = cam.GetCurrentViewMatrix();
+
+        ubo.model = glm::mat4(1.0f);
+        if (modelIndex == 0)
+        {
+            ubo.model = glm::rotate(
+                glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
+                glm::radians(-90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        }
 
         if (modelIndex == 1)
         {
@@ -3107,13 +3118,11 @@ private:
             auto currentTime = std::chrono::high_resolution_clock::now();
 
             float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-            ubo.model = glm::scale(glm::mat4(1.0f), glm::vec3(gui.test_scale));
-            ubo.model = glm::translate(ubo.model, glm::vec3(gui.test_translation[0], gui.test_translation[1], gui.test_translation[2]));
             ubo.model = glm::rotate(ubo.model, time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         }
 
-        if (modelIndex == animPlayer.modelIndex)
-            ubo.model = glm::scale(glm::mat4(1.0f), glm::vec3(gui.animated_scale));
+        ubo.model = glm::scale(ubo.model, glm::vec3(gui.model_scales[modelIndex]));
+        ubo.model = glm::translate(ubo.model, glm::vec3(gui.model_translations[modelIndex][0], gui.model_translations[modelIndex][1], gui.model_translations[modelIndex][2]));
 
 #endif // ENABLE_CAMERA_ANIM
         ubo.proj[1][1] *= -1;   // Flip sign of scaling factor
