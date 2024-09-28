@@ -238,7 +238,8 @@ inline glm::quat Assimp2GLMQUAT(aiQuaternion& src)
 Camera cam = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 Timer timer;
 GUI gui = GUI(&cam, &timer);
-AnimationPlayer animPlayer = AnimationPlayer(0, nullptr);
+//AnimationPlayer animPlayer = AnimationPlayer(0, nullptr);
+AnimationPlayer animPlayer;
 
 // Callbacks
 void MouseMovementCallback(GLFWwindow* window, double x_pos, double y_pos);
@@ -486,8 +487,9 @@ private:
         models.push_back(model);
 
         // Map to Animation Player
-        if (!model.meshes[0].animations.empty() && animPlayer.tgt_model == nullptr)
-            animPlayer.SetValues(0, &models.back());
+        //if (!model.meshes[0].animations.empty() && animPlayer.tgt_model == nullptr)
+        if (!model.meshes[0].animations.empty())
+            animPlayer.SetValues(0, models.back());
     }
 
     void ExtractBoneWeightForVertices(std::vector<Vertex>& vertices, const aiMesh* mesh, const aiScene* scene, Model& model)
@@ -702,13 +704,14 @@ private:
         CreateUniformBuffers(models.size() - 1);
         if (passLightingData)
         {
-            CreateLightingUniformBuffers(models.size() - 1);
+            if (lightingUniformBuffers.empty())
+                CreateLightingUniformBuffers(models.size() - 1);
             CreateLightingDataDescriptorPool(models.size() - 1);
         }
         else
             CreateDescriptorPool(models.size() - 1);
 
-        if (models.back().meshes[0].animations.empty())
+        if (models.back().meshes[0].animations.empty() )
             CreateWireframeGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", passLightingData);
 
         CreateDescriptorSets(models.size() - 1, passLightingData);
@@ -746,10 +749,10 @@ private:
         CreateFramebuffers();
 #ifdef USE_ASSIMP
         AddModel(2, true);
-        //AddModel(0, false);
         AddModel(0, false, "models/suzanne.obj", "textures/marble.png", "textures/marble_normal.png");
+        //AddModel(1, false, "models/wiggly.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
+        AddModel(2, true, "models/wicker_basket_02_2k.fbx", "models/textures/wicker_basket_02_diff_2k.jpg", "models/textures/wicker_basket_02_nor_dx_2k.png");
         AddModel(1, false, "models/boy_animated.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
-        //AddModel(1, "models/wiggly.fbx", "textures/plaster.jpg");
         //AddModel(1, "models/bob_lamp.fbx", "textures/plaster.jpg");
         ////AddModel(1, "models/deer.fbx", "textures/plaster.jpg");
         //AddModel(1, "models/female_doctor.fbx", "textures/plaster.jpg");
@@ -1890,6 +1893,8 @@ private:
         if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &wireframeGraphicsPipelines[wireframeGraphicsPipelines.size() - 1]) != VK_SUCCESS)
             throw std::runtime_error("failed to create graphics pipeline!");
 
+        models[models.size() - 1].wireframeIndex = wireframeGraphicsPipelines.size() - 1;
+
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
@@ -2712,36 +2717,40 @@ private:
             if (!models[i].enabled)
                 continue;
 
-            // Bind graphics pipeline
-            if (gui.wireframe_flag && !models[i].meshes[0].animations.empty())
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, animatedWireframeGraphicsPipeline);
-            else if (gui.wireframe_flag && models[i].meshes[0].animations.empty())
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, wireframeGraphicsPipelines[i]);
-            else
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipelines[models[i].pipelineIndex]);
+            // Render mesh
+            for (auto& mesh : models[i].meshes)
+            {
+                // Bind graphics pipeline
+                if (gui.wireframe_flag && !mesh.animations.empty())
+                    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, animatedWireframeGraphicsPipeline);
+                else if (gui.wireframe_flag && mesh.animations.empty())
+                    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, wireframeGraphicsPipelines[models[i].wireframeIndex]);
+                else
+                    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipelines[models[i].pipelineIndex]);
 
-            VkBuffer vertexBuffersRend[] = { vertexBuffers[i]};
-            VkDeviceSize offsets[] = { 0 };
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersRend, offsets);
-            vkCmdBindIndexBuffer(commandBuffer, indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
+                VkBuffer vertexBuffersRend[] = { vertexBuffers[mesh.vertexBufferIndex] };
+                VkDeviceSize offsets[] = { 0 };
+                vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffersRend, offsets);
+                vkCmdBindIndexBuffer(commandBuffer, indexBuffers[mesh.vertexBufferIndex], 0, VK_INDEX_TYPE_UINT32);
 
-            VkViewport viewport{};
-            viewport.x = 0.0f;
-            viewport.y = 0.0f;
-            viewport.width = static_cast<float>(swapChainExtent.width);
-            viewport.height = static_cast<float>(swapChainExtent.height);
-            viewport.minDepth = 0.0f;
-            viewport.maxDepth = 1.0f;
-            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+                VkViewport viewport{};
+                viewport.x = 0.0f;
+                viewport.y = 0.0f;
+                viewport.width = static_cast<float>(swapChainExtent.width);
+                viewport.height = static_cast<float>(swapChainExtent.height);
+                viewport.minDepth = 0.0f;
+                viewport.maxDepth = 1.0f;
+                vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-            VkRect2D scissor{};
-            scissor.offset = { 0, 0 };
-            scissor.extent = swapChainExtent;
-            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+                VkRect2D scissor{};
+                scissor.offset = { 0, 0 };
+                scissor.extent = swapChainExtent;
+                vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts[models[i].pipelineIndex], 0, 1, &descriptorSets[i][currentFrame], 0, nullptr);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts[models[i].pipelineIndex], 0, 1, &descriptorSets[i][currentFrame], 0, nullptr);
 
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(models[i].meshes[0].indices.size()), 1, 0, 0, 0);
+                vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.indices.size()), 1, 0, 0, 0);
+            }
         }
 
         // Record dear imgui primitives into command buffer
@@ -2810,76 +2819,84 @@ private:
 
     void CreateVertexBuffer(const size_t modelIndex)
     {
+        for (size_t i = 0; i < models[modelIndex].meshes.size(); i++)
+        {
 #ifdef USE_ASSIMP
-        VkDeviceSize bufferSize = sizeof(models[modelIndex].meshes[0].vertices[0]) * models[modelIndex].meshes[0].vertices.size();
+            VkDeviceSize bufferSize = sizeof(models[modelIndex].meshes[i].vertices[0]) * models[modelIndex].meshes[i].vertices.size();
 #else
-        VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+            VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 #endif // USE_ASSIMP
 
-        // Staging buffer
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingBufferMemory);
+            // Staging buffer
+            VkBuffer stagingBuffer;
+            VkDeviceMemory stagingBufferMemory;
+            CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                stagingBuffer, stagingBufferMemory);
 
-        // Map memory
-        void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+            // Map memory
+            void* data;
+            vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
 #ifdef USE_ASSIMP
-        memcpy(data, models[modelIndex].meshes[0].vertices.data(), static_cast<size_t>(bufferSize));
+            memcpy(data, models[modelIndex].meshes[i].vertices.data(), static_cast<size_t>(bufferSize));
 #else
-        memcpy(data, vertices.data(), static_cast<size_t>(bufferSize));
+            memcpy(data, vertices.data(), static_cast<size_t>(bufferSize));
 #endif // USE_ASSIMP
-        vkUnmapMemory(device, stagingBufferMemory);
+            vkUnmapMemory(device, stagingBufferMemory);
 
-        // Resize buffer and memory vectors
-        vertexBuffers.resize(vertexBuffers.size() + 1);
-        vertexBufferMemories.resize(vertexBufferMemories.size() + 1);
+            // Resize buffer and memory vectors
+            vertexBuffers.resize(vertexBuffers.size() + 1);
+            vertexBufferMemories.resize(vertexBufferMemories.size() + 1);
 
-        CreateBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            vertexBuffers[modelIndex], vertexBufferMemories[modelIndex]);
+            models[modelIndex].meshes[i].vertexBufferIndex = vertexBuffers.size() - 1;
 
-        CopyBuffer(stagingBuffer, vertexBuffers[modelIndex], bufferSize);
+            CreateBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                vertexBuffers[models[modelIndex].meshes[i].vertexBufferIndex], vertexBufferMemories[models[modelIndex].meshes[i].vertexBufferIndex]);
 
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
+            CopyBuffer(stagingBuffer, vertexBuffers[models[modelIndex].meshes[i].vertexBufferIndex], bufferSize);
+
+            vkDestroyBuffer(device, stagingBuffer, nullptr);
+            vkFreeMemory(device, stagingBufferMemory, nullptr);
+        }
     }
 
     void CreateIndexBuffer(const size_t modelIndex)
     {
+        for (size_t i = 0; i < models[modelIndex].meshes.size(); i++)
+        {
 #ifdef USE_ASSIMP
-        VkDeviceSize bufferSize = sizeof(models[modelIndex].meshes[0].indices[0]) * models[modelIndex].meshes[0].indices.size();
+            VkDeviceSize bufferSize = sizeof(models[modelIndex].meshes[i].indices[0]) * models[modelIndex].meshes[i].indices.size();
 #else
-        VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+            VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 #endif // USE_ASSIMP
 
-        // Staging buffer
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingBufferMemory);
+            // Staging buffer
+            VkBuffer stagingBuffer;
+            VkDeviceMemory stagingBufferMemory;
+            CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                stagingBuffer, stagingBufferMemory);
 
-        // Map memory
-        void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+            // Map memory
+            void* data;
+            vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
 #ifdef USE_ASSIMP
-        memcpy(data, models[modelIndex].meshes[0].indices.data(), static_cast<size_t>(bufferSize));
+            memcpy(data, models[modelIndex].meshes[i].indices.data(), static_cast<size_t>(bufferSize));
 #else
-        memcpy(data, indices.data(), static_cast<size_t>(bufferSize));
+            memcpy(data, indices.data(), static_cast<size_t>(bufferSize));
 #endif // USE_ASSIMP
-        vkUnmapMemory(device, stagingBufferMemory);
+            vkUnmapMemory(device, stagingBufferMemory);
 
-        // Resize buffer and memory vectors
-        indexBuffers.resize(indexBuffers.size() + 1);
-        indexBufferMemories.resize(indexBufferMemories.size() + 1);
+            // Resize buffer and memory vectors
+            indexBuffers.resize(indexBuffers.size() + 1);
+            indexBufferMemories.resize(indexBufferMemories.size() + 1);
 
-        CreateBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            indexBuffers[modelIndex], indexBufferMemories[modelIndex]);
+            CreateBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                indexBuffers[models[modelIndex].meshes[i].vertexBufferIndex], indexBufferMemories[models[modelIndex].meshes[i].vertexBufferIndex]);
 
-        CopyBuffer(stagingBuffer, indexBuffers[modelIndex], bufferSize);
+            CopyBuffer(stagingBuffer, indexBuffers[models[modelIndex].meshes[i].vertexBufferIndex], bufferSize);
 
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
+            vkDestroyBuffer(device, stagingBuffer, nullptr);
+            vkFreeMemory(device, stagingBufferMemory, nullptr);
+        }
     }
 
     void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize bufferSize)
@@ -3097,7 +3114,7 @@ private:
             ubo.model = glm::rotate(ubo.model, time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         }
 
-        if (modelIndex == 2)
+        if (modelIndex == 3)
             ubo.model = glm::scale(glm::mat4(1.0f), glm::vec3(gui.animated_scale));
 
 #endif // ENABLE_CAMERA_ANIM
@@ -3105,7 +3122,7 @@ private:
 
         // Animate model
         // TODO: Add better logic!
-        if (modelIndex == 2 && !animPlayer.tgt_model->meshes[0].animations.empty())
+        if (modelIndex == 3 && !animPlayer.tgt_model.meshes[0].animations.empty())
         {
             animPlayer.is_playing = gui.play_animation_flag;
 
@@ -3121,9 +3138,9 @@ private:
 
             std::vector<glm::mat4> boneTranforms;
             if (gui.cubic_interpolation_flag)
-                boneTranforms = animPlayer.tgt_model->AnimateCI(animPlayer.animation_time, &skeletonBones);
+                boneTranforms = animPlayer.tgt_model.AnimateCI(animPlayer.animation_time, &skeletonBones);
             else
-                boneTranforms = animPlayer.tgt_model->AnimateLI(animPlayer.animation_time, &skeletonBones);
+                boneTranforms = animPlayer.tgt_model.AnimateLI(animPlayer.animation_time, &skeletonBones);
             memcpy(ubo.boneTransforms, boneTranforms.data(), boneTranforms.size() * sizeof(glm::mat4));
         }
 
@@ -3151,7 +3168,7 @@ private:
         lightUBO.lightPos = glm::vec3(gui.light_pos[0], gui.light_pos[1], gui.light_pos[2]);
         lightUBO.camPos = cam.position;
 
-        memcpy(lightingUniformBuffersMapped[modelIndex][currentFrame], &lightUBO, sizeof(lightUBO));
+        memcpy(lightingUniformBuffersMapped[0][currentFrame], &lightUBO, sizeof(lightUBO));
     }
 
     void CreateDescriptorPool(const size_t modelIndex)
@@ -3290,7 +3307,7 @@ private:
             if (passLightingData)
             {
                 // Lighting data UBO
-                lightingBufferInfo.buffer = lightingUniformBuffers[modelIndex][i];
+                lightingBufferInfo.buffer = lightingUniformBuffers[0][i];
                 lightingBufferInfo.offset = 0;
                 lightingBufferInfo.range = sizeof(LightDataUBO);
 

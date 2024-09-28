@@ -8,9 +8,10 @@ struct AnimationPlayer {
 	bool is_playing = true;
 
 	uint32_t current_anim;					// Animation index
-	Model* tgt_model;
+	Model tgt_model;
 
-	AnimationPlayer(uint32_t anim_index, Model* model) : current_anim(anim_index), tgt_model(model) {};
+	AnimationPlayer(uint32_t anim_index, Model model) : current_anim(anim_index), tgt_model(model) {};
+	AnimationPlayer() {}
 
 	/// <summary>
 	/// Uses global time to set new animation time, while checking that it doesn't surpass its duration, in which case it resets
@@ -25,7 +26,7 @@ struct AnimationPlayer {
 		double new_time = animation_time + global_time * animation_speed;
 
 		// Check whether time exceeds animation duration, then reset
-		if (new_time > tgt_model->meshes[0].animations[current_anim].duration)
+		if (new_time > tgt_model.meshes[0].animations[current_anim].duration)
 		{
 			ResetTime();
 
@@ -51,7 +52,7 @@ struct AnimationPlayer {
 	/// </summary>
 	/// <param name="anim"></param>
 	/// <param name="model"></param>
-	void SetValues(uint32_t anim_index, Model* model)
+	void SetValues(uint32_t anim_index, Model model)
 	{
 		tgt_model = model;
 		current_anim = anim_index;

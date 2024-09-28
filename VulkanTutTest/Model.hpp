@@ -30,6 +30,7 @@ struct Mesh {
 	const aiScene* scene;						        // Points to scene of the mesh. Needed to preserve node tree for bone transformation calculations
 	int boneCounter = 0;						// Number of bones in mesh rig
 	glm::mat4 inverseTransform;					// Inverse transform matrix for mesh to scene. Possibly only useful if more submeshes are used
+    uint32_t vertexBufferIndex = 0;             // Index of vertex buffer for mesh
 
 	/*uint32_t m_boneVertexCount;
 	uint32_t m_skeletonVBO;
@@ -50,6 +51,7 @@ struct Model {
 	std::vector<Mesh> meshes;
 	bool enabled = true;
 	uint32_t pipelineIndex = 0;
+    uint32_t wireframeIndex = 0;
 
     // Linear interpolation
 	std::vector<glm::mat4> AnimateLI(double currentTime, std::vector<glm::vec3>* boneVertices)
