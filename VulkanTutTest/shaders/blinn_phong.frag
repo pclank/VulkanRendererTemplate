@@ -68,6 +68,6 @@ void main()
     vec3 specular = vec3(0.3f) * spec; // assuming bright white light color
 
     // Output
-    outColor = vec4(ambient + diffuse + specular, 1.0f);
-    // outColor = vec4(texture(normalSampler, fragTexCoord).rgb, 1.0f);
+    // outColor = vec4(ambient + diffuse + specular, 1.0f);
+    outColor = vec4(ambient + diffuse + specular, texture(texSampler, fragTexCoord).w);
 }

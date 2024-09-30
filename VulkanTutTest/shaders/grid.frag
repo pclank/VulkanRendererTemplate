@@ -2,6 +2,7 @@
 
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec2 fragTexCoord;
+layout(location = 2) in vec3 fragPos;
 
 float vpw = 1.0f; // Width, in pixels
 float vph = 1.0f; // Height, in pixels
@@ -29,7 +30,7 @@ void main()
     //    outColor = vec4(1.0, 1.0, 1.0, 1.0);
 
     if (fract(fragTexCoord.x / 0.001f) < 0.01f || fract(fragTexCoord.y / 0.001f) < 0.01f)
-        outColor = vec4(1.0f);
+        outColor = vec4(1.0f, 1.0f, 1.0f, (10.0f - length(fragPos)));
     else
         outColor = vec4(0.0f);
 }

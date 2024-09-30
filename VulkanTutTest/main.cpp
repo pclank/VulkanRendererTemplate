@@ -175,10 +175,10 @@ const std::vector<uint16_t> indices = { 0, 1, 2, 2, 3, 0,
                                         4, 5, 6, 6, 7, 4};
 
 const std::vector<Vertex> gridVertices = {
-    {{1.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{-1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+    {{1.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
+    {{-1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}},
+    {{1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+    {{-1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}}
 };
 
 const std::vector<uint16_t> gridIndices = {0, 1, 2, 1, 3, 2};
@@ -3725,7 +3725,7 @@ private:
         UniformBufferObject ubo{};
 
         ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-        ubo.model = glm::scale(ubo.model, glm::vec3(10.0f));
+        ubo.model = glm::scale(ubo.model, glm::vec3(200.0f));
         ubo.proj = cam.GetCurrentProjectionMatrix(swapChainExtent.width, swapChainExtent.height);
         ubo.view = cam.GetCurrentViewMatrix();
 

@@ -72,5 +72,6 @@ void main()
     // outColor = vec4(texture(texSampler, fragTexCoord).rgb * fragColor, 1.0f);
     // outColor = texture(texSampler, fragTexCoord);
     // outColor = vec4(fragNorm, 1.0f);
-    outColor = vec4(ambient + diffuse + specular, 1.0f);
+    // outColor = vec4(ambient + diffuse + specular, 1.0f);
+    outColor = vec4(ambient + diffuse + specular, texture(texSampler, fragTexCoord).w);
 }
