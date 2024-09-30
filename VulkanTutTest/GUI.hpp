@@ -11,6 +11,8 @@ struct GUI {
     float light_pos[3] = { 0.0f, 5.0f, 1.0f };
     std::vector<float> model_scales;
     std::vector<std::array<float, 3>> model_translations;
+    std::vector<uint32_t> explode_flags;
+    std::vector<float> explosion_rates;
     float animated_scale = 1.0f;
     float animation_speed = 1.0f;
 	bool spacebar_down = false;
@@ -35,6 +37,8 @@ struct GUI {
     {
         model_scales = std::vector<float>(nModels, 1.0f);
         model_translations.resize(nModels);
+        explode_flags.resize(nModels);
+        explosion_rates = std::vector<float>(nModels, 4.7f);
     }
 
 	void Render()
@@ -79,10 +83,14 @@ struct GUI {
             const std::string strEnabled = std::string("Model ") + std::to_string(i) + " enabled";
             const std::string strTranslation = std::string("Model ") + std::to_string(i) + " translation";
             const std::string strScale = std::string("Model ") + std::to_string(i) + " scaling";
+            const std::string strExplodeFlag = std::string("Model ") + std::to_string(i) + " explode";
+            const std::string strExplodeRate = std::string("Model ") + std::to_string(i) + " explode rate";
             ImGui::TextColored(ImVec4(1, 1, 0, 1), strIndex.c_str());
             ImGui::Checkbox(strEnabled.c_str(), &models[i].enabled);
             ImGui::SliderFloat3(strTranslation.c_str(), model_translations[i].data(), -10.0f, 10.0f, "%.2f");
             ImGui::SliderFloat(strScale.c_str(), &model_scales[i], 0.01f, 5.0f, "%.02f");
+            ImGui::Checkbox(strExplodeFlag.c_str(), (bool*)&explode_flags[i]);
+            ImGui::SliderFloat(strExplodeRate.c_str(), &explosion_rates[i], 0.0f, 10.0f, "%.1f");
         }
         ImGui::End();
 

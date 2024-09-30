@@ -1,9 +1,12 @@
 #version 450
 
+const int MAX_BONES = 120;                      // We need a maximum number, and 120 should be safe for the vast majority of rigs
+
 layout(binding = 0) uniform UniformBufferObject {
     mat4 model;
     mat4 view;
     mat4 proj;
+    mat4 inBoneTransforms[MAX_BONES];
 } ubo;
 
 layout(location = 0) in vec3 inPos;

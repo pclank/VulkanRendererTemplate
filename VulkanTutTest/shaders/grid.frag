@@ -13,18 +13,23 @@ layout(location = 0) out vec4 outColor;
 
 void main()
 {
-    float lX = gl_FragCoord.x / vpw;
-    float lY = gl_FragCoord.y / vph;
+    //float lX = gl_FragCoord.x / vpw;
+    //float lY = gl_FragCoord.y / vph;
+    //
+    //float scaleFactor = 10000.0f;
+    //
+    //float offX = (scaleFactor * offset[0]) + gl_FragCoord.x;
+    //float offY = (scaleFactor * offset[1]) + (1.0 - gl_FragCoord.y);
+    //
+    //if (int(mod(offX, pitch[0])) == 0 || int(mod(offY, pitch[1])) == 0)
+    //{
+    //    outColor = vec4(0.0, 0.0, 0.0, 0.5);
+    //}
+    //else
+    //    outColor = vec4(1.0, 1.0, 1.0, 1.0);
 
-    float scaleFactor = 10000.0f;
-
-    float offX = (scaleFactor * offset[0]) + gl_FragCoord.x;
-    float offY = (scaleFactor * offset[1]) + (1.0 - gl_FragCoord.y);
-
-    if (int(mod(offX, pitch[0])) == 0 || int(mod(offY, pitch[1])) == 0)
-    {
-        outColor = vec4(0.0, 0.0, 0.0, 0.5);
-    }
+    if (fract(fragTexCoord.x / 0.001f) < 0.01f || fract(fragTexCoord.y / 0.001f) < 0.01f)
+        outColor = vec4(1.0f);
     else
-        outColor = vec4(1.0, 1.0, 1.0, 1.0);
+        outColor = vec4(0.0f);
 }
