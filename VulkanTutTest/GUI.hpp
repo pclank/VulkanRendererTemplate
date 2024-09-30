@@ -24,6 +24,7 @@ struct GUI {
     bool blinn_flag = false;
     bool cubic_interpolation_flag = false;
     bool grid_flag = false;
+    bool normals_flag = false;
 	float lastX = 0.0f;
 	float lastY = 0.0f;
     Camera* cam;
@@ -67,6 +68,7 @@ struct GUI {
         ImGui::Checkbox("Wireframe rendering", &wireframe_flag);
         ImGui::Checkbox("Skybox rendering", &skybox_flag);
         ImGui::Checkbox("Grid rendering", &grid_flag);
+        ImGui::Checkbox("Draw normals", &normals_flag);
         ImGui::Separator();
         ImGui::SliderFloat("Animation speed", &animation_speed, 0.1f, 2.0f, "%.2f");
         ImGui::Checkbox("Cubic interpolation", &cubic_interpolation_flag);

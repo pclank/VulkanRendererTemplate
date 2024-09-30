@@ -304,6 +304,11 @@ private:
     VkPipeline skyboxWireframeGraphicsPipeline;
     VkPipelineLayout gridPipelineLayout;
     VkPipeline gridGraphicsPipeline;
+    std::vector<VkPipelineLayout> normalPipelineLayouts;
+    std::vector<VkPipeline> normalGraphicsPipelines;
+    VkPipelineLayout animatedNormalPipelineLayout;
+    VkPipeline animatedNormalGraphicsPipeline;
+
     // Frame buffers
     std::vector<VkFramebuffer> swapChainFramebuffers;
     std::vector<VkFramebuffer> imguiFramebuffers;
@@ -354,10 +359,12 @@ private:
     VkDescriptorPool skyboxDescriptorPool;
     VkDescriptorPool lightingDescriptorPool;
     VkDescriptorPool gridDescriptorPool;
+    VkDescriptorPool normalDescriptorPool;
     //std::vector<VkDescriptorSet> descriptorSets;
     std::vector<std::vector<VkDescriptorSet>> descriptorSets;
     std::vector<VkDescriptorSet> skyboxDescriptorSet;
     std::vector<VkDescriptorSet> gridDescriptorSet;
+    std::vector<VkDescriptorSet> normalDescriptorSet;
     uint32_t mipLevels;
     /*VkImage textureImage;
     VkDeviceMemory textureImageMemory;
@@ -733,10 +740,11 @@ private:
         else
             CreateDescriptorPool(models.size() - 1);
 
-        if (models.back().meshes[0].animations.empty() )
+        if (models.back().meshes[0].animations.empty())
             CreateWireframeGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", passLightingData);
 
         CreateDescriptorSets(models.size() - 1, passLightingData);
+        CreateNormalsGraphicsPipeline(passLightingData);
     }
 
     void AddSkybox(const char* folder = SKYBOX_PATH.c_str())
@@ -803,12 +811,15 @@ private:
         CreateDescriptorSets();
 #endif // USE_ASSIMP
         CreateAnimatedWireframeGraphicsPipeline("shaders/linear_skinning_vert.spv", "shaders/linear_skinning_frag.spv", true);
+        CreateAnimatedNormalGraphicsPipeline();
         gui.nModels = models.size();
         gui.models = models.data();
         gui.Setup();
         //AddSkybox();
         AddSkybox("textures/Yokohama3/");
         AddGrid();
+        CreateNormalDescriptorPool();
+        CreateNormalDescriptorSet();
         CreateCommandBuffers();
         CreateSyncObjects();
     }
@@ -946,6 +957,14 @@ private:
         vkDestroyPipelineLayout(device, animatedWireframePipelineLayout, nullptr);
         vkDestroyPipeline(device, gridGraphicsPipeline, nullptr);
         vkDestroyPipelineLayout(device, gridPipelineLayout, nullptr);
+        vkDestroyPipeline(device, animatedNormalGraphicsPipeline, nullptr);
+        vkDestroyPipelineLayout(device, animatedNormalPipelineLayout, nullptr);
+
+        for (size_t i = 0; i < normalGraphicsPipelines.size(); i++)
+            vkDestroyPipeline(device, normalGraphicsPipelines[i], nullptr);
+
+        for (size_t i = 0; i < normalPipelineLayouts.size(); i++)
+            vkDestroyPipelineLayout(device, normalPipelineLayouts[i], nullptr);
 
         vkDestroyRenderPass(device, renderPass, nullptr);
         vkDestroyRenderPass(device, imguiRenderPass, nullptr);
@@ -1021,6 +1040,7 @@ private:
         vkDestroyDescriptorPool(device, skyboxDescriptorPool, nullptr);
         vkDestroyDescriptorPool(device, gridDescriptorPool, nullptr);
         vkDestroyDescriptorPool(device, lightingDescriptorPool, nullptr);
+        vkDestroyDescriptorPool(device, normalDescriptorPool, nullptr);
         
         // Clear all vertex and index buffers and memories
         for (size_t i = 0; i < vertexBuffers.size(); i++)
@@ -1935,7 +1955,7 @@ private:
         pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
         wireframePipelineLayouts.resize(wireframePipelineLayouts.size() + 1);
-        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &wireframePipelineLayouts[wireframePipelineLayouts.size() - 1]) != VK_SUCCESS)
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &wireframePipelineLayouts.back()) != VK_SUCCESS)
             throw std::runtime_error("failed to create pipeline layout!");
 
         // Create pipeline
@@ -1958,7 +1978,7 @@ private:
         pipelineInfo.basePipelineIndex = -1; // Optional
 
         wireframeGraphicsPipelines.resize(wireframeGraphicsPipelines.size() + 1);
-        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &wireframeGraphicsPipelines[wireframeGraphicsPipelines.size() - 1]) != VK_SUCCESS)
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &wireframeGraphicsPipelines.back()) != VK_SUCCESS)
             throw std::runtime_error("failed to create graphics pipeline!");
 
         models[models.size() - 1].wireframeIndex = wireframeGraphicsPipelines.size() - 1;
@@ -2645,8 +2665,12 @@ private:
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
 
-    void CreateNormalsGraphicsPipeline(const char* vertShaderFile = "shaders/vert.spv", const char* fragShaderFile = "shaders/frag.spv", bool passLightingData = false, const char* geomShaderFile = "shaders/geom.spv")
+    void CreateNormalsGraphicsPipeline(bool passLightingData = false)
     {
+        const char* vertShaderFile = "shaders/normDisplay_vert.spv";
+        const char* fragShaderFile = "shaders/normDisplay_frag.spv";
+        const char* geomShaderFile = "shaders/normDisplay_geom.spv";
+
         auto vertShaderCode = ReadFile(vertShaderFile);
         auto fragShaderCode = ReadFile(fragShaderFile);
         auto geomShaderCode = ReadFile(geomShaderFile);
@@ -2676,7 +2700,6 @@ private:
         geomShaderStageInfo.module = geomShaderModule;
         geomShaderStageInfo.pName = "main";
 
-        //VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
         VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, geomShaderStageInfo, fragShaderStageInfo };
 
         // Dynamic state
@@ -2795,15 +2818,14 @@ private:
         pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
         pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
-        pipelineLayouts.resize(pipelineLayouts.size() + 1);
-
-        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayouts.back()) != VK_SUCCESS)
+        normalPipelineLayouts.resize(normalPipelineLayouts.size() + 1);
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &normalPipelineLayouts.back()) != VK_SUCCESS)
             throw std::runtime_error("failed to create pipeline layout!");
 
         // Create pipeline
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.stageCount = 2;
+        pipelineInfo.stageCount = 3;
         pipelineInfo.pStages = shaderStages;
         pipelineInfo.pVertexInputState = &vertexInputInfo;
         pipelineInfo.pInputAssemblyState = &inputAssembly;
@@ -2813,19 +2835,203 @@ private:
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = pipelineLayouts[pipelineLayouts.size() - 1];
+        pipelineInfo.layout = normalPipelineLayouts.back();
         pipelineInfo.renderPass = renderPass;
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
         pipelineInfo.basePipelineIndex = -1; // Optional
 
-        graphicsPipelines.resize(graphicsPipelines.size() + 1);
-
-        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipelines.back()) != VK_SUCCESS)
+        normalGraphicsPipelines.resize(normalGraphicsPipelines.size() + 1);
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &normalGraphicsPipelines.back()) != VK_SUCCESS)
             throw std::runtime_error("failed to create graphics pipeline!");
 
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
+        vkDestroyShaderModule(device, geomShaderModule, nullptr);
+    }
+
+    void CreateAnimatedNormalGraphicsPipeline()
+    {
+        const char* vertShaderFile = "shaders/linear_skinning_norm_vert.spv";
+        const char* fragShaderFile = "shaders/normDisplay_frag.spv";
+        const char* geomShaderFile = "shaders/normDisplay_geom.spv";
+
+        auto vertShaderCode = ReadFile(vertShaderFile);
+        auto fragShaderCode = ReadFile(fragShaderFile);
+        auto geomShaderCode = ReadFile(geomShaderFile);
+
+        VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
+        VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
+        VkShaderModule geomShaderModule = CreateShaderModule(geomShaderCode);
+
+        // Vertex shader to pipeline
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName = "main";
+
+        // Fragment shader to pipeline
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName = "main";
+
+        // Geometry shader to pipeline
+        VkPipelineShaderStageCreateInfo geomShaderStageInfo{};
+        geomShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        geomShaderStageInfo.stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+        geomShaderStageInfo.module = geomShaderModule;
+        geomShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, geomShaderStageInfo, fragShaderStageInfo };
+
+        // Dynamic state
+        std::vector<VkDynamicState> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        };
+
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.scissorCount = 1;
+
+        // Vertices
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        auto bindingDescription = Vertex::GetBindingDescription();
+        auto attributeDescriptions = Vertex::GetAttributeDescriptions();
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(Vertex::GetAttributeDescriptions().size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+        // Input assembly
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        // Viewport
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float)swapChainExtent.width;
+        viewport.height = (float)swapChainExtent.height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        // Scissor
+        VkRect2D scissor{};
+        scissor.offset = { 0, 0 };
+        scissor.extent = swapChainExtent;
+
+        // Rasterizer
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.lineWidth = 1.0f;
+        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterizer.depthBiasEnable = VK_FALSE;
+        rasterizer.depthBiasConstantFactor = 0.0f; // Optional
+        rasterizer.depthBiasClamp = 0.0f; // Optional
+        rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
+
+        // Multisampling
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.sampleShadingEnable = VK_TRUE;
+        multisampling.rasterizationSamples = msaaSamples;
+        multisampling.minSampleShading = 0.2f; // Optional
+        multisampling.pSampleMask = nullptr; // Optional
+        multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
+        multisampling.alphaToOneEnable = VK_FALSE; // Optional
+
+        // Depth & Stencil testing
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+        depthStencil.depthBoundsTestEnable = VK_FALSE;
+        depthStencil.minDepthBounds = 0.0f; // Optional
+        depthStencil.maxDepthBounds = 1.0f; // Optional
+        depthStencil.stencilTestEnable = VK_FALSE;
+        depthStencil.front = {}; // Optional
+        depthStencil.back = {}; // Optional
+
+        // Color blending
+        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_TRUE;
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
+        colorBlending.attachmentCount = 1;
+        colorBlending.pAttachments = &colorBlendAttachment;
+        colorBlending.blendConstants[0] = 0.0f; // Optional
+        colorBlending.blendConstants[1] = 0.0f; // Optional
+        colorBlending.blendConstants[2] = 0.0f; // Optional
+        colorBlending.blendConstants[3] = 0.0f; // Optional
+
+        // Create pipeline layout
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1;
+        /*if (passLightingData)
+            pipelineLayoutInfo.pSetLayouts = &lightingDataDescriptorSetLayout;
+        else
+            pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;*/
+        pipelineLayoutInfo.pSetLayouts = &lightingDataDescriptorSetLayout;
+        pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
+        pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &animatedNormalPipelineLayout) != VK_SUCCESS)
+            throw std::runtime_error("failed to create pipeline layout!");
+
+        // Create pipeline
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 3;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState;
+        pipelineInfo.layout = animatedNormalPipelineLayout;
+        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.subpass = 0;
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
+        pipelineInfo.basePipelineIndex = -1; // Optional
+
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &animatedNormalGraphicsPipeline) != VK_SUCCESS)
+            throw std::runtime_error("failed to create graphics pipeline!");
+
+        vkDestroyShaderModule(device, fragShaderModule, nullptr);
+        vkDestroyShaderModule(device, vertShaderModule, nullptr);
+        vkDestroyShaderModule(device, geomShaderModule, nullptr);
     }
 
     void CreateRenderPass()
@@ -3202,6 +3408,24 @@ private:
                 vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts[models[i].pipelineIndex], 0, 1, &descriptorSets[i][currentFrame], 0, nullptr);
+
+                vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.indices.size()), 1, 0, 0, 0);
+
+                // Normal drawing
+                if (!gui.normals_flag)
+                    continue;
+
+                // Bind graphics pipeline for normal drawing
+                if (!mesh.animations.empty())
+                {
+                    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, animatedNormalGraphicsPipeline);
+                    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, animatedNormalPipelineLayout, 0, 1, &descriptorSets[i][currentFrame], 0, nullptr);
+                }
+                else
+                {
+                    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, normalGraphicsPipelines[i]);
+                    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, normalPipelineLayouts[i], 0, 1, &descriptorSets[i][currentFrame], 0, nullptr);
+                }
 
                 vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.indices.size()), 1, 0, 0, 0);
             }
@@ -3812,6 +4036,23 @@ private:
             throw std::runtime_error("failed to create descriptor pool!");
     }
 
+    void CreateNormalDescriptorPool()
+    {
+        std::array<VkDescriptorPoolSize, 1> poolSizes;
+        // UBO
+        poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &normalDescriptorPool) != VK_SUCCESS)
+            throw std::runtime_error("failed to create descriptor pool!");
+    }
+
     void CreateLightingDataDescriptorPool(const uint32_t modelIndex)
     {
         descriptorPools.resize(descriptorPools.size() + 1);
@@ -4049,6 +4290,44 @@ private:
             std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = gridDescriptorSet[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].dstArrayElement = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pBufferInfo = &bufferInfo;
+            descriptorWrites[0].pImageInfo = nullptr; // Optional
+            descriptorWrites[0].pTexelBufferView = nullptr; // Optional
+
+            vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+        }
+    }
+
+    void CreateNormalDescriptorSet()
+    {
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, gridDescriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = normalDescriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        allocInfo.pSetLayouts = layouts.data();
+
+        normalDescriptorSet.resize(static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
+
+        if (vkAllocateDescriptorSets(device, &allocInfo, normalDescriptorSet.data()) != VK_SUCCESS)
+            throw std::runtime_error("failed to allocate descriptor sets!");
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            // UBO
+            VkDescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = skyboxUniformBuffers[i];
+            bufferInfo.offset = 0;
+            bufferInfo.range = sizeof(UniformBufferObject);
+
+            // Update configurations
+            std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = normalDescriptorSet[i];
             descriptorWrites[0].dstBinding = 0;
             descriptorWrites[0].dstArrayElement = 0;
             descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
