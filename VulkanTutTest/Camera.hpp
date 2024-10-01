@@ -17,7 +17,7 @@ enum Movement_Direction {
 const float PITCH_CONSTRAINT = 89.0f;
 const float YAW = -90.0f;
 const float PITCH = 0.0f;
-const float SPEED = 5.0f;
+const float SPEED = 10.0f;
 const float SENSITIVITY = 0.1f;
 const float ARCBALL_SENSITIVITY = 5.0f;
 const float ARCBALL_MOVE_SENSITIVITY = 0.2f;
