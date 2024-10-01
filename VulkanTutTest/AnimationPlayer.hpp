@@ -12,7 +12,13 @@ struct AnimationPlayer {
 	uint32_t modelIndex;
 
 	AnimationPlayer(uint32_t animIndex, Model* model, uint32_t modelIndex) : current_anim(animIndex), tgt_model(model), modelIndex(modelIndex) {};
-	//AnimationPlayer() {}
+
+	AnimationPlayer()
+	{
+		current_anim = 0;
+		tgt_model = nullptr;
+		modelIndex = 0;
+	}
 
 	/// <summary>
 	/// Uses global time to set new animation time, while checking that it doesn't surpass its duration, in which case it resets

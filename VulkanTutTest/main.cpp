@@ -86,6 +86,7 @@ const std::string TEXTURES_FOLDER = "textures/";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 const size_t MAX_BONES = 120;
+const uint32_t MAX_MODELS = 10;
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
@@ -249,7 +250,9 @@ inline glm::quat Assimp2GLMQUAT(aiQuaternion& src)
 Camera cam = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 Timer timer;
 GUI gui = GUI(&cam, &timer);
-AnimationPlayer animPlayer = AnimationPlayer(0, nullptr, 0);
+//AnimationPlayer animPlayer = AnimationPlayer(0, nullptr, 0);
+std::vector<AnimationPlayer> animPlayers;
+std::vector<Assimp::Importer> importers = std::vector<Assimp::Importer>(MAX_MODELS);
 
 // Callbacks
 void MouseMovementCallback(GLFWwindow* window, double x_pos, double y_pos);
@@ -386,7 +389,8 @@ private:
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
     // Models
-    std::vector<Model> models;
+    std::vector<Model> models = std::vector<Model>(MAX_MODELS);
+    uint32_t emptyModelIndex = 0;
     // Multisampling
     VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
     VkImage colorImage;
@@ -433,7 +437,7 @@ private:
     {
         Model model;
 
-        static Assimp::Importer importer;
+        Assimp::Importer& importer = importers[emptyModelIndex];
         InitImporter(importer, file);
 
         const aiScene* scene = importer.GetScene();
@@ -514,11 +518,16 @@ private:
         // Parse animations
         ParseAnimations(scene, model);
 
-        models.push_back(model);
+        //models.push_back(model);
+        models[emptyModelIndex] = model;
 
         // Map to Animation Player
-        if (!model.meshes[0].animations.empty() && animPlayer.tgt_model == nullptr)
-            animPlayer.SetValues(0, &models.back(), models.size() - 1);
+        if (!model.meshes[0].animations.empty())
+        {
+            animPlayers.resize(animPlayers.size() + 1);
+            //animPlayers.back().SetValues(0, &models.back(), models.size() - 1);
+            animPlayers.back().SetValues(0, &models[emptyModelIndex], emptyModelIndex);
+        }
     }
 
     void ExtractBoneWeightForVertices(std::vector<Vertex>& vertices, const aiMesh* mesh, const aiScene* scene, Model& model)
@@ -725,26 +734,31 @@ private:
 
     void AddModel(const uint32_t pipelineIndex = 0, bool passLightingData = false, const char* modelFile = MODEL_PATH.c_str(), const char* diffuseTextureFile = TEXTURE_PATH.c_str(), const char* normalTextureFile = NORMAL_PATH.c_str())
     {
+        if (emptyModelIndex == models.size() - 1)
+            throw std::runtime_error("Too many models! Increase vector size!");
+
         ImportModel(pipelineIndex, modelFile);
-        LoadTexture(models.size() - 1, diffuseTextureFile);
-        LoadTexture(models.size() - 1, normalTextureFile, true);
-        CreateVertexBuffer(models.size() - 1);
-        CreateIndexBuffer(models.size() - 1);
-        CreateUniformBuffers(models.size() - 1);
+        LoadTexture(emptyModelIndex, diffuseTextureFile);
+        LoadTexture(emptyModelIndex, normalTextureFile, true);
+        CreateVertexBuffer(emptyModelIndex);
+        CreateIndexBuffer(emptyModelIndex);
+        CreateUniformBuffers(emptyModelIndex);
         if (passLightingData)
         {
             if (lightingUniformBuffers.empty())
-                CreateLightingUniformBuffers(models.size() - 1);
-            CreateLightingDataDescriptorPool(models.size() - 1);
+                CreateLightingUniformBuffers(emptyModelIndex);
+            CreateLightingDataDescriptorPool(emptyModelIndex);
         }
         else
-            CreateDescriptorPool(models.size() - 1);
+            CreateDescriptorPool(emptyModelIndex);
 
-        if (models.back().meshes[0].animations.empty())
+        if (models[emptyModelIndex].meshes[0].animations.empty())
             CreateWireframeGraphicsPipeline("shaders/vert.spv", "shaders/frag.spv", passLightingData);
 
-        CreateDescriptorSets(models.size() - 1, passLightingData);
+        CreateDescriptorSets(emptyModelIndex, passLightingData);
         CreateNormalsGraphicsPipeline(passLightingData);
+
+        emptyModelIndex++;
     }
 
     void AddSkybox(const char* folder = SKYBOX_PATH.c_str())
@@ -791,10 +805,10 @@ private:
 #ifdef USE_ASSIMP
         AddModel(2, true);
         AddModel(0, false, "models/suzanne.obj", "textures/marble.png", "textures/marble_normal.png");
-        //AddModel(1, false, "models/wiggly.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
         AddModel(2, true, "models/wicker_basket_02_2k.fbx", "models/textures/wicker_basket_02_diff_2k.jpg", "models/textures/wicker_basket_02_nor_dx_2k.png");
-        //AddModel(1, true, "models/flair_edited.fbx", "textures/body_diffuse.png", "textures/body_normal.png");
+        AddModel(1, true, "models/flair_edited.fbx", "textures/body_diffuse.png", "textures/body_normal.png");
         AddModel(1, true, "models/ymca.fbx", "textures/parasiteZombie_body_diffuse.png", "textures/parasiteZombie_body_normal.bmp");
+        //AddModel(1, true, "models/wiggly.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
         // AddModel(1, false, "models/boy_animated.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
         //AddModel(1, "models/bob_lamp.fbx", "textures/plaster.jpg");
         //AddModel(1, "models/deer.fbx", "textures/plaster.jpg");
@@ -812,8 +826,10 @@ private:
 #endif // USE_ASSIMP
         CreateAnimatedWireframeGraphicsPipeline("shaders/linear_skinning_vert.spv", "shaders/linear_skinning_frag.spv", true);
         CreateAnimatedNormalGraphicsPipeline();
-        gui.nModels = models.size();
+        gui.nModels = emptyModelIndex;
         gui.models = models.data();
+        gui.animationPlayers = animPlayers.data();
+        gui.nAnimationPlayers = animPlayers.size();
         gui.Setup();
         //AddSkybox();
         AddSkybox("textures/Yokohama3/");
@@ -864,7 +880,8 @@ private:
         RecordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
         // Update model uniform buffers
-        for (size_t i = 0; i < models.size(); i++)
+        //for (size_t i = 0; i < models.size(); i++)
+        for (size_t i = 0; i < emptyModelIndex; i++)
         {
             UpdateUniformBuffer(i, currentFrame);
 
@@ -3371,7 +3388,8 @@ private:
         }
 
         // Render models
-        for (size_t i = 0; i < models.size(); i++)
+        //for (size_t i = 0; i < models.size(); i++)
+        for (size_t i = 0; i < emptyModelIndex; i++)
         {
             // Only render model if enabled
             if (!models[i].enabled)
@@ -3777,9 +3795,9 @@ private:
     void CreateUniformBuffers(const size_t modelIndex)
     {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-        uniformBuffers.resize(models.size());
-        uniformBuffersMemory.resize(models.size());
-        uniformBuffersMapped.resize(models.size());
+        uniformBuffers.resize(emptyModelIndex + 1);
+        uniformBuffersMemory.resize(emptyModelIndex + 1);
+        uniformBuffersMapped.resize(emptyModelIndex + 1);
         uniformBuffers[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
         uniformBuffersMemory[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
         uniformBuffersMapped[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
@@ -3831,9 +3849,9 @@ private:
     void CreateLightingUniformBuffers(const uint32_t modelIndex)
     {
         VkDeviceSize bufferSize = sizeof(LightDataUBO);
-        lightingUniformBuffers.resize((models.size()));
-        lightingUniformBuffersMemory.resize((models.size()));
-        lightingUniformBuffersMapped.resize((models.size()));
+        lightingUniformBuffers.resize(emptyModelIndex + 1);
+        lightingUniformBuffersMemory.resize(emptyModelIndex + 1);
+        lightingUniformBuffersMapped.resize(emptyModelIndex + 1);
         lightingUniformBuffers[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
         lightingUniformBuffersMemory[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
         lightingUniformBuffersMapped[modelIndex].resize(MAX_FRAMES_IN_FLIGHT);
@@ -3883,34 +3901,37 @@ private:
             ubo.model = glm::rotate(ubo.model, time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         }
 
-        ubo.model = glm::scale(ubo.model, glm::vec3(gui.model_scales[modelIndex]));
         ubo.model = glm::translate(ubo.model, glm::vec3(gui.model_translations[modelIndex][0], gui.model_translations[modelIndex][1], gui.model_translations[modelIndex][2]));
+        ubo.model = glm::scale(ubo.model, glm::vec3(gui.model_scales[modelIndex]));
 
 #endif // ENABLE_CAMERA_ANIM
         ubo.proj[1][1] *= -1;   // Flip sign of scaling factor
 
         // Animate model
-        // TODO: Add better logic!
-        if (modelIndex == animPlayer.modelIndex && !animPlayer.tgt_model->meshes[0].animations.empty())
+        bool reset_animations = false;
+        for (auto& animPlayer : animPlayers)
         {
-            animPlayer.is_playing = gui.play_animation_flag;
-
-            std::vector<glm::vec3> skeletonBones;                   // TODO: NOT USED NOW!
-            animPlayer.UpdateTime(timer.GetData().DeltaTime, gui.animation_speed);
-
-            // Checks for animation reset
-            if (gui.reset_animation_flag)
+            if (modelIndex == animPlayer.modelIndex && !animPlayer.tgt_model->meshes[0].animations.empty())
             {
-                animPlayer.ResetTime();
-                gui.reset_animation_flag = false;
-            }
+                animPlayer.is_playing = gui.play_animation_flag;
 
-            std::vector<glm::mat4> boneTranforms;
-            if (gui.cubic_interpolation_flag)
-                boneTranforms = animPlayer.tgt_model->AnimateCI(animPlayer.animation_time, &skeletonBones);
-            else
-                boneTranforms = animPlayer.tgt_model->AnimateLI(animPlayer.animation_time, &skeletonBones);
-            memcpy(ubo.boneTransforms, boneTranforms.data(), boneTranforms.size() * sizeof(glm::mat4));
+                std::vector<glm::vec3> skeletonBones;                   // TODO: NOT USED NOW!
+                animPlayer.UpdateTime(timer.GetData().DeltaTime, gui.animation_speed);
+
+                // Checks for animation reset
+                /*if (gui.reset_animation_flag)
+                {
+                    animPlayer.ResetTime();
+                    reset_animations = true;
+                }*/
+
+                std::vector<glm::mat4> boneTranforms;
+                if (gui.cubic_interpolation_flag)
+                    boneTranforms = animPlayer.tgt_model->AnimateCI(animPlayer.animation_time, &skeletonBones);
+                else
+                    boneTranforms = animPlayer.tgt_model->AnimateLI(animPlayer.animation_time, &skeletonBones);
+                memcpy(ubo.boneTransforms, boneTranforms.data(), boneTranforms.size() * sizeof(glm::mat4));
+            }
         }
 
         //ubo.time = glfwGetTime();

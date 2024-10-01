@@ -1,5 +1,7 @@
 #pragma once
 
+#include<AnimationPlayer.hpp>
+
 enum GUI_BUTTON {
     RESET_BUTTON,
     PLAY_PAUSE_BUTTON
@@ -30,7 +32,9 @@ struct GUI {
     Camera* cam;
     Timer* timer;
     Model* models = nullptr;
+    AnimationPlayer* animationPlayers = nullptr;
     uint32_t nModels = 0;
+    uint32_t nAnimationPlayers = 0;
 
     GUI(Camera* cam, Timer* timer) : cam(cam), timer(timer) {}
 
@@ -105,7 +109,11 @@ struct GUI {
     void ButtonCallback(GUI_BUTTON button)
     {
         if (button == RESET_BUTTON)
+        {
             reset_animation_flag = true;
+            for (uint32_t i = 0; i < nAnimationPlayers; i++)
+                animationPlayers[i].ResetTime();
+        }
         else if (button == PLAY_PAUSE_BUTTON)
             play_animation_flag = !play_animation_flag;
     }
