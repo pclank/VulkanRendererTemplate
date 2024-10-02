@@ -68,6 +68,7 @@
 #define USE_ASSIMP                  // DO NOT DISABLE!
 //#define DISABLE_SKYBOX_ON_WIREFRAME
 #define WRITABLE_SWAPCHAIN
+//#define RUN_COPY_TEST
 
 // Constants
 #ifdef HIGH_RES
@@ -810,8 +811,8 @@ private:
         AddModel(2, true, "models/wicker_basket_02_2k.fbx", "models/textures/wicker_basket_02_diff_2k.jpg", "models/textures/wicker_basket_02_nor_dx_2k.png");
         AddModel(1, true, "models/flair_edited.fbx", "textures/body_diffuse.png", "textures/body_normal.png");
         AddModel(1, true, "models/ymca.fbx", "textures/parasiteZombie_body_diffuse.png", "textures/parasiteZombie_body_normal.bmp");
-        AddModel(1, true, "models/wiggly.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
-        // AddModel(1, false, "models/boy_animated.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
+        //AddModel(1, true, "models/wiggly.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
+        //AddModel(1, false, "models/boy_animated.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
         //AddModel(1, "models/bob_lamp.fbx", "textures/plaster.jpg");
         //AddModel(1, "models/deer.fbx", "textures/plaster.jpg");
         //AddModel(1, "models/female_doctor.fbx", "textures/plaster.jpg");
@@ -833,7 +834,6 @@ private:
         gui.animationPlayers = animPlayers.data();
         gui.nAnimationPlayers = animPlayers.size();
         gui.Setup();
-        // CopyImage(textureImages[0], textureImages[1], 1024, 1024, 1, 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         //AddSkybox();
         AddSkybox("textures/Yokohama3/");
         AddGrid();
@@ -917,12 +917,12 @@ private:
         if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS)
             throw std::runtime_error("failed to submit draw command buffer!");
 
+#ifdef RUN_COPY_TEST
         static bool run_test = false;
         if (run_test)
         {
-            CopyImage(textureImages[2], VK_FORMAT_R8G8B8A8_SRGB, swapChainImages[0], swapChainImageFormat, 1024, 1024, 1, 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-            CopyImage(textureImages[2], VK_FORMAT_R8G8B8A8_SRGB, swapChainImages[1], swapChainImageFormat, 1024, 1024, 1, 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-            //CopyImage(swapChainImages[currentFrame], swapChainImageFormat, textureImages[2], VK_FORMAT_R8G8B8A8_SRGB, 1024, 1024, 1, 1, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            //BlitImage(textureImages[2], VK_FORMAT_R8G8B8A8_SRGB, 1024, 1024, 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, swapChainImages[currentFrame], swapChainImageFormat, swapChainExtent.width, swapChainExtent.height, 1, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+            BlitImage(swapChainImages[currentFrame], swapChainImageFormat, swapChainExtent.width, swapChainExtent.height, 1, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, textureImages[1], VK_FORMAT_R8G8B8A8_SRGB, 2048, 2048, mipLevels - 2, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
         else
         {
@@ -930,6 +930,7 @@ private:
             TransitionImageLayout(swapChainImages[1], 1, swapChainImageFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT, 1);
             run_test = true;
         }
+#endif // RUN_COPY_TEST
 
         // Presentation
         VkPresentInfoKHR presentInfo{};
@@ -3281,6 +3282,51 @@ private:
         }
     }
 
+    void BlitImage(VkImage& src, VkFormat srcFormat, int srcWidth, int srcHeight, uint32_t srcMipLevels, VkImageLayout srcImageLayout, VkImage& dst, VkFormat dstFormat, int dstWidth, int dstHeight, uint32_t dstMipLevels, VkImageLayout dstImageLayout)
+    {
+        TransitionImageLayout(src, srcMipLevels, srcFormat, srcImageLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+        TransitionImageLayout(dst, dstMipLevels, dstFormat, dstImageLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(commandPool);
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.image = src;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.subresourceRange.levelCount = 1;
+
+        VkImageBlit blit{};
+        blit.srcOffsets[0] = { 0, 0, 0 };
+        blit.srcOffsets[1] = { srcWidth, srcHeight, 1 };
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.mipLevel = 0;
+        blit.srcSubresource.baseArrayLayer = 0;
+        blit.srcSubresource.layerCount = 1;
+        blit.dstOffsets[0] = { 0, 0, 0 };
+        blit.dstOffsets[1] = { dstWidth, dstHeight, 1 };
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.mipLevel = 0;
+        blit.dstSubresource.baseArrayLayer = 0;
+        blit.dstSubresource.layerCount = 1;
+
+        vkCmdBlitImage(commandBuffer,
+            src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &blit,
+            VK_FILTER_LINEAR);
+
+        EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue);
+
+        GenerateMipmaps(dst, dstFormat, dstWidth, dstHeight, dstMipLevels, 1);
+
+        TransitionImageLayout(src, srcMipLevels, srcFormat, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcImageLayout, VK_IMAGE_ASPECT_COLOR_BIT);
+        //TransitionImageLayout(dst, dstMipLevels, dstFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dstImageLayout, VK_IMAGE_ASPECT_COLOR_BIT);
+    }
+
     void CopyImage(VkImage& src, VkFormat srcFormat, VkImage& dst, VkFormat dstFormat, uint32_t width, uint32_t height, uint32_t depth, uint32_t copyMipLevels, VkImageLayout srcImageLayout, VkImageLayout dstImageLayout)
     {
         TransitionImageLayout(src, mipLevels, srcFormat, srcImageLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
@@ -3310,68 +3356,6 @@ private:
         
         TransitionImageLayout(src, mipLevels, srcFormat, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcImageLayout, VK_IMAGE_ASPECT_COLOR_BIT);
         TransitionImageLayout(dst, copyMipLevels, dstFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dstImageLayout, VK_IMAGE_ASPECT_COLOR_BIT);
-    }
-
-    void TestCopyImage(VkCommandBuffer commandBuffer, VkImage& exSrcImage, VkDeviceMemory& exSrcImageMemory, VkImage& exDstImage, VkDeviceMemory& exDstImageMemory, VkImageLayout exDstImageLayout = VK_IMAGE_LAYOUT_UNDEFINED)
-    {
-        static bool run_test = false;
-        if (!run_test)
-        {
-            VkImageCreateInfo imCreateInfo{};
-            imCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-            imCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-            imCreateInfo.extent.width = static_cast<uint32_t>(swapChainExtent.width);
-            imCreateInfo.extent.height = static_cast<uint32_t>(swapChainExtent.height);
-            imCreateInfo.extent.depth = 1;
-            imCreateInfo.mipLevels = mipLevels;
-            imCreateInfo.arrayLayers = 1;
-            imCreateInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-            imCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-            imCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            imCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-            imCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            imCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-            imCreateInfo.flags = 0; // Optional
-            vkCreateImage(device, &imCreateInfo, nullptr, &exSrcImage);
-            vkCreateImage(device, &imCreateInfo, nullptr, &exDstImage);
-
-            // Allocate memory for image
-            VkMemoryRequirements memRequirements;
-            vkGetImageMemoryRequirements(device, exSrcImage, &memRequirements);
-            vkGetImageMemoryRequirements(device, exDstImage, &memRequirements);
-
-            VkMemoryAllocateInfo allocInfo{};
-            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            allocInfo.allocationSize = memRequirements.size;
-            allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-            vkAllocateMemory(device, &allocInfo, nullptr, &exSrcImageMemory);
-            vkAllocateMemory(device, &allocInfo, nullptr, &exDstImageMemory);
-
-            vkBindImageMemory(device, exSrcImage, exSrcImageMemory, 0);
-            vkBindImageMemory(device, exDstImage, exDstImageMemory, 0);
-
-            TransitionImageLayout(exSrcImage, 1, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1);
-            TransitionImageLayout(exDstImage, 1, VK_FORMAT_R8G8B8A8_SRGB, exDstImageLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1);
-
-            run_test = true;
-        }
-        else
-            TransitionImageLayout(exDstImage, 1, VK_FORMAT_R8G8B8A8_SRGB, exDstImageLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1);
-
-        VkImageCopy copyInfo;
-        copyInfo.extent = { swapChainExtent.width, swapChainExtent.height, 1 };
-        copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyInfo.srcSubresource.mipLevel = 0;
-        copyInfo.srcSubresource.baseArrayLayer = 0;
-        copyInfo.srcSubresource.layerCount = 1;
-        copyInfo.srcOffset = { 0, 0, 0 };
-        copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyInfo.dstSubresource.mipLevel = 0;
-        copyInfo.dstSubresource.baseArrayLayer = 0;
-        copyInfo.dstSubresource.layerCount = 1;
-        copyInfo.dstOffset = { 0, 0, 0 };
-        vkCmdCopyImage(commandBuffer, exSrcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, exDstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
     }
 
     void CreateCommandPools()
