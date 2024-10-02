@@ -68,7 +68,7 @@
 #define USE_ASSIMP                  // DO NOT DISABLE!
 //#define DISABLE_SKYBOX_ON_WIREFRAME
 #define WRITABLE_SWAPCHAIN
-//#define RUN_COPY_TEST
+#define RUN_COPY_TEST
 
 // Constants
 #ifdef HIGH_RES
@@ -3321,10 +3321,12 @@ private:
 
         EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue);
 
-        GenerateMipmaps(dst, dstFormat, dstWidth, dstHeight, dstMipLevels, 1);
+        if (dstImageLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            GenerateMipmaps(dst, dstFormat, dstWidth, dstHeight, dstMipLevels, 1);
 
         TransitionImageLayout(src, srcMipLevels, srcFormat, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcImageLayout, VK_IMAGE_ASPECT_COLOR_BIT);
-        //TransitionImageLayout(dst, dstMipLevels, dstFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dstImageLayout, VK_IMAGE_ASPECT_COLOR_BIT);
+        if (dstImageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            TransitionImageLayout(dst, dstMipLevels, dstFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dstImageLayout, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     void CopyImage(VkImage& src, VkFormat srcFormat, VkImage& dst, VkFormat dstFormat, uint32_t width, uint32_t height, uint32_t depth, uint32_t copyMipLevels, VkImageLayout srcImageLayout, VkImageLayout dstImageLayout)
