@@ -67,6 +67,7 @@
 #define MODEL_IMPORT_DEBUG
 #define USE_ASSIMP                  // DO NOT DISABLE!
 //#define DISABLE_SKYBOX_ON_WIREFRAME
+#define WRITABLE_SWAPCHAIN
 
 // Constants
 #ifdef HIGH_RES
@@ -315,6 +316,7 @@ private:
     // Frame buffers
     std::vector<VkFramebuffer> swapChainFramebuffers;
     std::vector<VkFramebuffer> imguiFramebuffers;
+    std::vector<VkFramebuffer> extraFramebuffers;
     // Command pools
     VkCommandPool commandPool;
     VkCommandPool transCommandPool;
@@ -808,7 +810,7 @@ private:
         AddModel(2, true, "models/wicker_basket_02_2k.fbx", "models/textures/wicker_basket_02_diff_2k.jpg", "models/textures/wicker_basket_02_nor_dx_2k.png");
         AddModel(1, true, "models/flair_edited.fbx", "textures/body_diffuse.png", "textures/body_normal.png");
         AddModel(1, true, "models/ymca.fbx", "textures/parasiteZombie_body_diffuse.png", "textures/parasiteZombie_body_normal.bmp");
-        //AddModel(1, true, "models/wiggly.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
+        AddModel(1, true, "models/wiggly.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
         // AddModel(1, false, "models/boy_animated.fbx", "textures/plaster.jpg", "textures/plaster_normal.png");
         //AddModel(1, "models/bob_lamp.fbx", "textures/plaster.jpg");
         //AddModel(1, "models/deer.fbx", "textures/plaster.jpg");
@@ -831,6 +833,7 @@ private:
         gui.animationPlayers = animPlayers.data();
         gui.nAnimationPlayers = animPlayers.size();
         gui.Setup();
+        // CopyImage(textureImages[0], textureImages[1], 1024, 1024, 1, 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         //AddSkybox();
         AddSkybox("textures/Yokohama3/");
         AddGrid();
@@ -913,6 +916,20 @@ private:
 
         if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS)
             throw std::runtime_error("failed to submit draw command buffer!");
+
+        static bool run_test = false;
+        if (run_test)
+        {
+            CopyImage(textureImages[2], VK_FORMAT_R8G8B8A8_SRGB, swapChainImages[0], swapChainImageFormat, 1024, 1024, 1, 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+            CopyImage(textureImages[2], VK_FORMAT_R8G8B8A8_SRGB, swapChainImages[1], swapChainImageFormat, 1024, 1024, 1, 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+            //CopyImage(swapChainImages[currentFrame], swapChainImageFormat, textureImages[2], VK_FORMAT_R8G8B8A8_SRGB, 1024, 1024, 1, 1, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
+        else
+        {
+            TransitionImageLayout(swapChainImages[0], 1, swapChainImageFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+            TransitionImageLayout(swapChainImages[1], 1, swapChainImageFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+            run_test = true;
+        }
 
         // Presentation
         VkPresentInfoKHR presentInfo{};
@@ -1108,6 +1125,9 @@ private:
 
         for (auto frameBuffer : imguiFramebuffers)
             vkDestroyFramebuffer(device, frameBuffer, nullptr);
+
+        for (auto frameBuffer : extraFramebuffers)
+            vkDestroyFramebuffer(device, frameBuffer, nullptr);
     }
 
     void RecreateSwapChain()
@@ -1128,6 +1148,7 @@ private:
         CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
+        CreateExtraFramebuffers();
 
         // We also need to take care of the UI
         ImGui_ImplVulkan_SetMinImageCount(MAX_FRAMES_IN_FLIGHT);
@@ -1586,7 +1607,11 @@ private:
         createInfo.imageColorSpace = surfaceFormat.colorSpace;
         createInfo.imageExtent = extent;
         createInfo.imageArrayLayers = 1;
+#ifdef WRITABLE_SWAPCHAIN
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+#else
         createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+#endif // WRITABLE_SWAPCHAIN
 
         QueueFamilyIndices indices = FindQueueFamilies(physicalDevice);
         uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value(), indices.transferFamily.value() };
@@ -1615,6 +1640,7 @@ private:
 
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
+        std::cout << "Swap chain width: " << swapChainExtent.width << "\nSwap chain height: " << swapChainExtent.height << std::endl;
 
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
         swapChainImages.resize(imageCount);
@@ -3228,6 +3254,126 @@ private:
         }
     }
 
+    void CreateExtraFramebuffers()
+    {
+        extraFramebuffers.resize(swapChainImageViews.size());
+
+        // Framebuffer for each image view
+        for (size_t i = 0; i < swapChainImageViews.size(); i++)
+        {
+            std::array<VkImageView, 3> attachments = {
+                colorImageView,
+                depthImageView,
+                swapChainImageViews[i]
+            };
+
+            VkFramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferInfo.renderPass = renderPass;
+            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+            framebufferInfo.pAttachments = attachments.data();
+            framebufferInfo.width = swapChainExtent.width;
+            framebufferInfo.height = swapChainExtent.height;
+            framebufferInfo.layers = 1;
+
+            if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &extraFramebuffers[i]) != VK_SUCCESS)
+                throw std::runtime_error("failed to create framebuffer!");
+        }
+    }
+
+    void CopyImage(VkImage& src, VkFormat srcFormat, VkImage& dst, VkFormat dstFormat, uint32_t width, uint32_t height, uint32_t depth, uint32_t copyMipLevels, VkImageLayout srcImageLayout, VkImageLayout dstImageLayout)
+    {
+        TransitionImageLayout(src, mipLevels, srcFormat, srcImageLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+        TransitionImageLayout(dst, copyMipLevels, dstFormat, dstImageLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(transCommandPool);
+
+        for (size_t i = 0; i < copyMipLevels; i++)
+        {
+            VkImageCopy copyInfo{};
+            copyInfo.extent = { width, height, depth };
+            copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyInfo.srcSubresource.mipLevel = i;
+            copyInfo.srcSubresource.baseArrayLayer = 0;
+            copyInfo.srcSubresource.layerCount = 1;
+            copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyInfo.dstSubresource.mipLevel = i;
+            copyInfo.dstSubresource.baseArrayLayer = 0;
+            copyInfo.dstSubresource.layerCount = 1;
+            copyInfo.srcOffset = { 0, 0, 0 };
+            copyInfo.dstOffset = { 0, 0, 0 };
+
+            vkCmdCopyImage(commandBuffer, src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
+        }
+
+        EndSingleTimeCommands(commandBuffer, transCommandPool, transferQueue);
+        
+        TransitionImageLayout(src, mipLevels, srcFormat, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcImageLayout, VK_IMAGE_ASPECT_COLOR_BIT);
+        TransitionImageLayout(dst, copyMipLevels, dstFormat, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dstImageLayout, VK_IMAGE_ASPECT_COLOR_BIT);
+    }
+
+    void TestCopyImage(VkCommandBuffer commandBuffer, VkImage& exSrcImage, VkDeviceMemory& exSrcImageMemory, VkImage& exDstImage, VkDeviceMemory& exDstImageMemory, VkImageLayout exDstImageLayout = VK_IMAGE_LAYOUT_UNDEFINED)
+    {
+        static bool run_test = false;
+        if (!run_test)
+        {
+            VkImageCreateInfo imCreateInfo{};
+            imCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+            imCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+            imCreateInfo.extent.width = static_cast<uint32_t>(swapChainExtent.width);
+            imCreateInfo.extent.height = static_cast<uint32_t>(swapChainExtent.height);
+            imCreateInfo.extent.depth = 1;
+            imCreateInfo.mipLevels = mipLevels;
+            imCreateInfo.arrayLayers = 1;
+            imCreateInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+            imCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+            imCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            imCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+            imCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            imCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+            imCreateInfo.flags = 0; // Optional
+            vkCreateImage(device, &imCreateInfo, nullptr, &exSrcImage);
+            vkCreateImage(device, &imCreateInfo, nullptr, &exDstImage);
+
+            // Allocate memory for image
+            VkMemoryRequirements memRequirements;
+            vkGetImageMemoryRequirements(device, exSrcImage, &memRequirements);
+            vkGetImageMemoryRequirements(device, exDstImage, &memRequirements);
+
+            VkMemoryAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            allocInfo.allocationSize = memRequirements.size;
+            allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+            vkAllocateMemory(device, &allocInfo, nullptr, &exSrcImageMemory);
+            vkAllocateMemory(device, &allocInfo, nullptr, &exDstImageMemory);
+
+            vkBindImageMemory(device, exSrcImage, exSrcImageMemory, 0);
+            vkBindImageMemory(device, exDstImage, exDstImageMemory, 0);
+
+            TransitionImageLayout(exSrcImage, 1, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+            TransitionImageLayout(exDstImage, 1, VK_FORMAT_R8G8B8A8_SRGB, exDstImageLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+            run_test = true;
+        }
+        else
+            TransitionImageLayout(exDstImage, 1, VK_FORMAT_R8G8B8A8_SRGB, exDstImageLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+        VkImageCopy copyInfo;
+        copyInfo.extent = { swapChainExtent.width, swapChainExtent.height, 1 };
+        copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyInfo.srcSubresource.mipLevel = 0;
+        copyInfo.srcSubresource.baseArrayLayer = 0;
+        copyInfo.srcSubresource.layerCount = 1;
+        copyInfo.srcOffset = { 0, 0, 0 };
+        copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyInfo.dstSubresource.mipLevel = 0;
+        copyInfo.dstSubresource.baseArrayLayer = 0;
+        copyInfo.dstSubresource.layerCount = 1;
+        copyInfo.dstOffset = { 0, 0, 0 };
+        vkCmdCopyImage(commandBuffer, exSrcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, exDstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
+    }
+
     void CreateCommandPools()
     {
         QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(physicalDevice);
@@ -4720,8 +4866,11 @@ private:
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(queue);
+        VkResult submitRes = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+        VkResult waitRes = vkQueueWaitIdle(queue);
+
+        if (waitRes != VK_SUCCESS)
+            throw std::runtime_error("failed to finish queue commands, with: " + waitRes);
 
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
@@ -4755,6 +4904,22 @@ private:
             sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         }
+        else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+        {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+        {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        }
         else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         {
             barrier.srcAccessMask = 0;
@@ -4774,6 +4939,70 @@ private:
 
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+        {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = 0;
+
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+        {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+        {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         }
         else
             throw std::invalid_argument("unsupported layout transition!");
@@ -4920,6 +5149,7 @@ private:
         VkFormat colorFormat = swapChainImageFormat;
 
         CreateImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
+        //CreateImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
         colorImageView = CreateImageView(colorImage, 1, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
