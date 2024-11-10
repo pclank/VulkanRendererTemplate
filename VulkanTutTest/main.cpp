@@ -3063,8 +3063,8 @@ private:
     {
         const std::vector<VkFormat> formats = { swapChainImageFormat, FindDepthFormat(), swapChainImageFormat };
         const std::vector<VkSampleCountFlagBits> samples = { msaaSamples, msaaSamples, VK_SAMPLE_COUNT_1_BIT };
-        const std::vector<VkAttachmentLoadOp> loadOps;
-        const std::vector<VkAttachmentStoreOp> storeOps;
+        const std::vector<VkAttachmentLoadOp> loadOps = { VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_LOAD_OP_DONT_CARE };
+        const std::vector<VkAttachmentStoreOp> storeOps = { VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE };
         const std::vector<VkImageLayout> layouts = { VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR };
         tmpRenderPassObj = RenderPass(device, VK_PIPELINE_BIND_POINT_GRAPHICS, formats, samples, loadOps, storeOps, layouts, "Main render pass", renderPass);
     }

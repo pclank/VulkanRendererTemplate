@@ -22,8 +22,10 @@ RenderPass::RenderPass(VkDevice device, VkPipelineBindPoint bindPoint,
     colorAttachment.format = formats[0];
     colorAttachment.samples = samples[0];
 
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    /*colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;*/
+    colorAttachment.loadOp = loadOps[0];
+    colorAttachment.storeOp = storeOps[0];
 
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -39,8 +41,10 @@ RenderPass::RenderPass(VkDevice device, VkPipelineBindPoint bindPoint,
     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    /*depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;*/
+    depthAttachment.stencilLoadOp = loadOps[1];
+    depthAttachment.stencilStoreOp = storeOps[1];
 
     depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     depthAttachment.finalLayout = layouts[1];
@@ -50,8 +54,10 @@ RenderPass::RenderPass(VkDevice device, VkPipelineBindPoint bindPoint,
     colorResolveAttachment.format = formats[2];
     colorResolveAttachment.samples = samples[2];
 
-    colorResolveAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorResolveAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    /*colorResolveAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorResolveAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;*/
+    colorResolveAttachment.loadOp = loadOps[2];
+    colorResolveAttachment.storeOp = storeOps[2];
 
     colorResolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorResolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
