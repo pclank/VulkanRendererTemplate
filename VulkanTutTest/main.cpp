@@ -59,6 +59,7 @@
 
 // Wrappers
 #include <RenderPass.hpp>
+#include <Image.hpp>
 
 // Macros
 #define REQUIRE_GEOM_SHADERS
@@ -4846,12 +4847,22 @@ private:
         TransitionImageLayout(depthImage, 1, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT);
     }
 
+    Image colorImageTmp;
+
     void CreateColorResources()
     {
         VkFormat colorFormat = swapChainImageFormat;
 
-        CreateImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
-        colorImageView = CreateImageView(colorImage, 1, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+        colorImageTmp = Image(device, physicalDevice, colorFormat, swapChainExtent.width, swapChainExtent.height, 1, msaaSamples,
+            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_ASPECT_COLOR_BIT, "color resource");
+
+        colorImage = colorImageTmp.image;
+        colorImageView = colorImageTmp.imageView;
+        colorImageMemory = colorImageTmp.imageMemory;
+
+        /*CreateImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
+        colorImageView = CreateImageView(colorImage, 1, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT);*/
     }
 
     VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
