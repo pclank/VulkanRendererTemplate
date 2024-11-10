@@ -145,6 +145,7 @@
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="RenderPass.cpp" />
     <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -246,6 +247,7 @@
     <ClInclude Include="imgui\imstb_textedit.h" />
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="Model.hpp" />
+    <ClInclude Include="RenderPass.hpp" />
     <ClInclude Include="Skybox.hpp" />
     <ClInclude Include="Timer.hpp" />
     <ClInclude Include="Vertex.hpp" />
