@@ -147,6 +147,7 @@
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="RenderPass.cpp" />
+    <ClCompile Include="Swapchain.cpp" />
     <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -252,7 +253,9 @@
     <ClInclude Include="Model.hpp" />
     <ClInclude Include="RenderPass.hpp" />
     <ClInclude Include="Skybox.hpp" />
+    <ClInclude Include="Swapchain.hpp" />
     <ClInclude Include="Timer.hpp" />
+    <ClInclude Include="UtilStructs.hpp" />
     <ClInclude Include="Vertex.hpp" />
   </ItemGroup>
   <ItemGroup>
