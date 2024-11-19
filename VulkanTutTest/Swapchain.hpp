@@ -8,13 +8,13 @@
 
 class Swapchain {
 public:
-	VkSwapchainKHR* swapChain;
+	VkSwapchainKHR swapChain;
 	std::vector<VkImage> images;
 	std::vector<VkImageView> imageViews;
 	VkFormat format;
 	VkExtent2D extent;
 
-	Swapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, GLFWwindow* window, VkSwapchainKHR& swapChain);
+	Swapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, GLFWwindow* window);
 
 	Swapchain();
 	~Swapchain();

@@ -1,6 +1,6 @@
 #include <Swapchain.hpp>
 
-Swapchain::Swapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, GLFWwindow* window, VkSwapchainKHR& swapChain)
+Swapchain::Swapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, GLFWwindow* window)
     :
     device(device), physicalDevice(physicalDevice), surface(surface), window(window)
 {
@@ -57,8 +57,6 @@ Swapchain::Swapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurface
     vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
     images.resize(imageCount);
     vkGetSwapchainImagesKHR(device, swapChain, &imageCount, images.data());
-
-    Swapchain::swapChain = &swapChain;
 }
 
 Swapchain::Swapchain()
