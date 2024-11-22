@@ -13,9 +13,9 @@ RenderPass::RenderPass(VkDevice device, VkPipelineBindPoint bindPoint,
     const std::vector<VkImageLayout>& initialLayouts,
 	const std::vector<VkImageLayout>& finalLayouts,
     const VkPipelineStageFlags dependencySrcStageMask,
-    const VkPipelineStageFlags dependencySrcAccessMask,
+    const VkAccessFlags dependencySrcAccessMask,
     const VkPipelineStageFlags dependencyDstStageMask,
-    const VkPipelineStageFlags dependencyDstAccessMask,
+    const VkAccessFlags dependencyDstAccessMask,
     const std::string& name,
     VkRenderPass& renderPass)
 	:
@@ -40,31 +40,37 @@ RenderPass::RenderPass(VkDevice device, VkPipelineBindPoint bindPoint,
 
     // Depth attachment
     VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = formats[1];
-    depthAttachment.samples = samples[1];
+    if (formats.size() > 1)
+    {
+        depthAttachment.format = formats[1];
+        depthAttachment.samples = samples[1];
 
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-    depthAttachment.stencilLoadOp = loadOps[1];
-    depthAttachment.stencilStoreOp = storeOps[1];
+        depthAttachment.stencilLoadOp = loadOps[1];
+        depthAttachment.stencilStoreOp = storeOps[1];
 
-    depthAttachment.initialLayout = initialLayouts[1];
-    depthAttachment.finalLayout = finalLayouts[1];
+        depthAttachment.initialLayout = initialLayouts[1];
+        depthAttachment.finalLayout = finalLayouts[1];
+    }
 
     // Color resolve attachments
     VkAttachmentDescription colorResolveAttachment{};
-    colorResolveAttachment.format = formats[2];
-    colorResolveAttachment.samples = samples[2];
+    if (formats.size() > 2)
+    {
+        colorResolveAttachment.format = formats[2];
+        colorResolveAttachment.samples = samples[2];
 
-    colorResolveAttachment.loadOp = loadOps[2];
-    colorResolveAttachment.storeOp = storeOps[2];
+        colorResolveAttachment.loadOp = loadOps[2];
+        colorResolveAttachment.storeOp = storeOps[2];
 
-    colorResolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorResolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorResolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorResolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-    colorResolveAttachment.initialLayout = initialLayouts[2];
-    colorResolveAttachment.finalLayout = finalLayouts[2];
+        colorResolveAttachment.initialLayout = initialLayouts[2];
+        colorResolveAttachment.finalLayout = finalLayouts[2];
+    }
 
     // Subpasses
     VkAttachmentReference colorAttachmentRef{};
@@ -83,14 +89,22 @@ RenderPass::RenderPass(VkDevice device, VkPipelineBindPoint bindPoint,
     subpass.pipelineBindPoint = bindPoint;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
-    subpass.pDepthStencilAttachment = &depthAttachmentRef;
-    subpass.pResolveAttachments = &colorResolveAttachmentRef;
+    if (formats.size() > 1)
+        subpass.pDepthStencilAttachment = &depthAttachmentRef;
+    if (formats.size() > 2)
+        subpass.pResolveAttachments = &colorResolveAttachmentRef;
 
-    std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorResolveAttachment };
+    std::array<VkAttachmentDescription, 2> attachments2 = { colorAttachment, depthAttachment };
+    std::array<VkAttachmentDescription, 3> attachments3 = { colorAttachment, depthAttachment, colorResolveAttachment };
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    renderPassInfo.pAttachments = attachments.data();
+    renderPassInfo.attachmentCount = static_cast<uint32_t>(formats.size());
+    if (formats.size() == 1)
+        renderPassInfo.pAttachments = &colorAttachment;
+    else if (formats.size() == 2)
+        renderPassInfo.pAttachments = attachments2.data();
+    else if (formats.size() == 3)
+        renderPassInfo.pAttachments = attachments3.data();
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
 

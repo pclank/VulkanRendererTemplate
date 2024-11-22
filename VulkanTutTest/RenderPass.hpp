@@ -20,9 +20,9 @@ public:
 		const std::vector<VkImageLayout>& initialLayouts,
 		const std::vector<VkImageLayout>& finalLayouts,
 		const VkPipelineStageFlags dependencySrcStageMask,
-		const VkPipelineStageFlags dependencySrcAccessMask,
+		const VkAccessFlags dependencySrcAccessMask,
 		const VkPipelineStageFlags dependencyDstStageMask,
-		const VkPipelineStageFlags dependencyDstAccessMask,
+		const VkAccessFlags dependencyDstAccessMask,
 		const std::string& name,
 		VkRenderPass& renderPass);
 
