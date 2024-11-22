@@ -91,12 +91,15 @@ struct GUI {
             const std::string strScale = std::string("Model ") + std::to_string(i) + " scaling";
             const std::string strExplodeFlag = std::string("Model ") + std::to_string(i) + " explode";
             const std::string strExplodeRate = std::string("Model ") + std::to_string(i) + " explode rate";
+            const std::string strAnim = std::string(" Model ") + std::to_string(i) + " current animation";
             ImGui::TextColored(ImVec4(1, 1, 0, 1), strIndex.c_str());
             ImGui::Checkbox(strEnabled.c_str(), &models[i].enabled);
             ImGui::SliderFloat3(strTranslation.c_str(), model_translations[i].data(), -10.0f, 10.0f, "%.2f");
             ImGui::SliderFloat(strScale.c_str(), &model_scales[i], 0.01f, 5.0f, "%.02f");
             ImGui::Checkbox(strExplodeFlag.c_str(), (bool*)&explode_flags[i]);
             ImGui::SliderFloat(strExplodeRate.c_str(), &explosion_rates[i], 0.0f, 10.0f, "%.1f");
+            if (models[i].meshes[0].animations.size() > 0)
+                ImGui::SliderInt(strAnim.c_str(), &models[i].currentAnim, 0, std::max(0, static_cast<int>(models[i].meshes[0].animations.size()) - 1));
         }
         ImGui::End();
 

@@ -32,10 +32,6 @@ struct Mesh {
 	glm::mat4 inverseTransform;					// Inverse transform matrix for mesh to scene. Possibly only useful if more submeshes are used
     uint32_t vertexBufferIndex = 0;             // Index of vertex buffer for mesh
 
-	/*uint32_t m_boneVertexCount;
-	uint32_t m_skeletonVBO;
-	uint32_t m_skeletonVAO;*/
-
 	//Mesh(const char* name, const aiScene* scene) : name(name), scene(scene) {}
 	Mesh(const aiScene* sceneP)
 	{
@@ -52,14 +48,13 @@ struct Model {
 	bool enabled = true;
 	uint32_t pipelineIndex = 0;
     uint32_t wireframeIndex = 0;
+    int currentAnim = 0;
 
     // Linear interpolation
 	std::vector<glm::mat4> AnimateLI(double currentTime, std::vector<glm::vec3>* boneVertices)
 	{
 		// TODO: Handle multi-mesh models
 		Mesh& mesh = meshes[0];
-
-		// TODO: Switching between animations can be added!
 
 		std::vector<glm::mat4> bone_transforms(mesh.boneCounter);                     // Vector to be passed to vertex shader, containing all bone transforms
 
@@ -88,8 +83,10 @@ struct Model {
 
         // Get SQT
         SQT sqt;
-        auto sqt_it = mesh.animations.back().poseSamples.find(node_name);
-        if (sqt_it != mesh.animations.back().poseSamples.end())
+        /*auto sqt_it = mesh.animations.back().poseSamples.find(node_name);
+        if (sqt_it != mesh.animations.back().poseSamples.end())*/
+        auto sqt_it = mesh.animations[currentAnim].poseSamples.find(node_name);
+        if (sqt_it != mesh.animations[currentAnim].poseSamples.end())
         {
             const std::vector<SQT>& bonePoses = sqt_it->second.bonePoses;
             const int numFrames = static_cast<int>(bonePoses.size());
@@ -159,8 +156,6 @@ struct Model {
         // TODO: Handle multi-mesh models
         Mesh& mesh = meshes[0];
 
-        // TODO: Switching between animations can be added!
-
         std::vector<glm::mat4> bone_transforms(mesh.boneCounter);                     // Vector to be passed to vertex shader, containing all bone transforms
 
         glm::mat4 initial_matrix = glm::mat4(1.0f);
@@ -188,8 +183,10 @@ struct Model {
 
         // Get SQT
         SQT sqt;
-        auto sqt_it = mesh.animations.back().poseSamples.find(node_name);
-        if (sqt_it != mesh.animations.back().poseSamples.end())
+        /*auto sqt_it = mesh.animations.back().poseSamples.find(node_name);
+        if (sqt_it != mesh.animations.back().poseSamples.end())*/
+        auto sqt_it = mesh.animations[currentAnim].poseSamples.find(node_name);
+        if (sqt_it != mesh.animations[currentAnim].poseSamples.end())
         {
             const std::vector<SQT>& bonePoses = sqt_it->second.bonePoses;
             const int numFrames = static_cast<int>(bonePoses.size());
