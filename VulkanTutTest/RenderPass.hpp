@@ -17,7 +17,12 @@ public:
 		const std::vector<VkSampleCountFlagBits>& samples,
 		const std::vector<VkAttachmentLoadOp>& loadOps,
 		const std::vector<VkAttachmentStoreOp>& storeOps,
-		const std::vector<VkImageLayout>& layouts,
+		const std::vector<VkImageLayout>& initialLayouts,
+		const std::vector<VkImageLayout>& finalLayouts,
+		const VkPipelineStageFlags dependencySrcStageMask,
+		const VkPipelineStageFlags dependencySrcAccessMask,
+		const VkPipelineStageFlags dependencyDstStageMask,
+		const VkPipelineStageFlags dependencyDstAccessMask,
 		const std::string& name,
 		VkRenderPass& renderPass);
 
