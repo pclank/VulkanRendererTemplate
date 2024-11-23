@@ -17,6 +17,7 @@ struct GUI {
     std::vector<float> explosion_rates;
     float animated_scale = 1.0f;
     float animation_speed = 1.0f;
+    float animation_interpolation_value = 0.0f;
 	bool spacebar_down = false;
 	bool first_mouse_flag = true;
     bool wireframe_flag = false;
@@ -75,6 +76,7 @@ struct GUI {
         ImGui::Checkbox("Draw normals", &normals_flag);
         ImGui::Separator();
         ImGui::SliderFloat("Animation speed", &animation_speed, 0.1f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Animation interpolation", &animation_interpolation_value, 0.0f, 1.0f, "%.2f");
         ImGui::Checkbox("Cubic interpolation", &cubic_interpolation_flag);
         ImGui::BeginGroup();
         if (ImGui::Button("Reset animation"))

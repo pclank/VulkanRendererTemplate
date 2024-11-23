@@ -3873,7 +3873,9 @@ private:
                 }*/
 
                 std::vector<glm::mat4> boneTranforms;
-                if (gui.cubic_interpolation_flag)
+                if (animPlayer.tgt_model->meshes[0].animations.size() > 1)
+                    boneTranforms = animPlayer.tgt_model->AnimateLI2(animPlayer.animation_time, &skeletonBones, gui.animation_interpolation_value);
+                else if (gui.cubic_interpolation_flag)
                     boneTranforms = animPlayer.tgt_model->AnimateCI(animPlayer.animation_time, &skeletonBones);
                 else
                     boneTranforms = animPlayer.tgt_model->AnimateLI(animPlayer.animation_time, &skeletonBones);

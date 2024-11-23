@@ -150,6 +150,147 @@ struct Model {
             TraverseNodeLI(currentTime, node->mChildren[i], global_transformation, boneVertices);
     }
 
+    // Linear interpolation between two animations
+    std::vector<glm::mat4> AnimateLI2(double currentTime, std::vector<glm::vec3>* boneVertices, const float interpolationValue)
+    {
+        // TODO: Handle multi-mesh models
+        Mesh& mesh = meshes[0];
+
+        std::vector<glm::mat4> bone_transforms(mesh.boneCounter);                     // Vector to be passed to vertex shader, containing all bone transforms
+
+        glm::mat4 initial_matrix = glm::mat4(1.0f);
+
+        // Traverse nodes from root node
+        TraverseNodeLI2(currentTime, mesh.scene->mRootNode, initial_matrix, boneVertices, interpolationValue);
+
+        //bone_transforms.resize(mesh.boneCounter);
+
+        // Traverse updated bones
+        for (int i = 0; i < mesh.boneCounter; i++)
+            bone_transforms[i] = mesh.bones[i].bone_transform;
+
+        // Write bone transforms to vertex shader
+        return bone_transforms;
+    }
+
+    void TraverseNodeLI2(const double currentTime, const aiNode* node, const glm::mat4& parent_transform, std::vector<glm::vec3>* boneVertices, const float interpolationValue)
+    {
+        // TODO: Handle multi-mesh models
+        Mesh& mesh = meshes[0];
+
+        std::string node_name(std::string(node->mName.data));
+        glm::mat4 node_transform = ConvertMatrixToGLMFormat(node->mTransformation);
+
+        glm::vec3 translationFirst(0.0f), scaleFirst(1.0f), translationSecond(0.0f), scaleSecond(1.0f);
+        glm::quat rotationFirst(1.0f, 0.0f, 0.0f, 0.0f), rotationSecond(1.0f, 0.0f, 0.0f, 0.0f);
+
+        // Get SQT of first animation
+        SQT sqt;
+        auto sqt_it = mesh.animations[currentAnim].poseSamples.find(node_name);
+        if (sqt_it != mesh.animations[currentAnim].poseSamples.end())
+        {
+            const std::vector<SQT>& bonePoses = sqt_it->second.bonePoses;
+            const int numFrames = static_cast<int>(bonePoses.size());
+
+            // Check if keyframes exist
+            if (numFrames > 0)
+            {
+                // Look for first keyframe
+                int frame_index = 0;
+                for (int i = 0; i < bonePoses.size() - 1; i++)
+                {
+
+                    if (bonePoses[i].time <= currentTime && currentTime < bonePoses[i + 1].time)
+                        frame_index = i;
+                }
+
+                // Find frames
+                int nextFrameIndex = frame_index + 1;
+
+                const SQT& currentFrameSQT = bonePoses[frame_index];
+                const SQT& nextFrameSQT = bonePoses[nextFrameIndex];
+
+                // Calculate the interpolation factor
+                float t = (currentTime - currentFrameSQT.time) / (nextFrameSQT.time - currentFrameSQT.time);
+
+                // Interpolate scale, rotation and translation
+                scaleFirst = currentFrameSQT.scale + t * (nextFrameSQT.scale - currentFrameSQT.scale);
+                rotationFirst = glm::normalize(glm::slerp(currentFrameSQT.rotation, nextFrameSQT.rotation, t));                    // SLERP IS THE WAY!
+                translationFirst = currentFrameSQT.translation + t * (nextFrameSQT.translation - currentFrameSQT.translation);
+            }
+        }
+
+        // Get SQT of second animation
+        sqt_it = mesh.animations[9].poseSamples.find(node_name);
+        if (sqt_it != mesh.animations[9].poseSamples.end())
+        {
+            const std::vector<SQT>& bonePoses = sqt_it->second.bonePoses;
+            const int numFrames = static_cast<int>(bonePoses.size());
+
+            // Check if keyframes exist
+            if (numFrames > 0)
+            {
+                // Look for first keyframe
+                int frame_index = 0;
+                for (int i = 0; i < bonePoses.size() - 1; i++)
+                {
+
+                    if (bonePoses[i].time <= currentTime && currentTime < bonePoses[i + 1].time)
+                        frame_index = i;
+                }
+
+                // Find frames
+                int nextFrameIndex = frame_index + 1;
+
+                const SQT& currentFrameSQT = bonePoses[frame_index];
+                const SQT& nextFrameSQT = bonePoses[nextFrameIndex];
+
+                // Calculate the interpolation factor
+                float t = (currentTime - currentFrameSQT.time) / (nextFrameSQT.time - currentFrameSQT.time);
+
+                // Interpolate scale, rotation and translation
+                scaleSecond = currentFrameSQT.scale + t * (nextFrameSQT.scale - currentFrameSQT.scale);
+                rotationSecond = glm::normalize(glm::slerp(currentFrameSQT.rotation, nextFrameSQT.rotation, t));                    // SLERP IS THE WAY!
+                translationSecond = currentFrameSQT.translation + t * (nextFrameSQT.translation - currentFrameSQT.translation);
+            }
+        }
+
+        // Interpolate between animations
+        const glm::vec3 scale = scaleFirst + (scaleSecond - scaleFirst) * interpolationValue;
+        const glm::quat rotation = glm::normalize(glm::slerp(rotationFirst, rotationSecond, interpolationValue));
+        const glm::vec3 translation = translationFirst + (translationSecond - translationFirst) * interpolationValue;
+
+        // Add them to the matrices
+        glm::mat4 scale_matrix = glm::scale(glm::mat4(1.0f), scale);
+        glm::mat4 rotation_matrix = glm::toMat4(rotation);
+        glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), translation);
+
+        node_transform = translation_matrix * rotation_matrix * scale_matrix;
+
+        // Combine with parent
+        glm::mat4 global_transformation = parent_transform * node_transform;
+
+        // Get Bone
+        auto bone_it = mesh.boneMap.find(node_name);
+        if (bone_it != mesh.boneMap.end())
+        {
+            mesh.bones[bone_it->second].bone_transform = mesh.inverseTransform * global_transformation * mesh.bones[bone_it->second].offsetMatrix;
+
+            if (node->mParent) {
+                // If node has a parent, add a visible connection from the parent to the node by placing bone vertices at the joint locations.
+                glm::vec4 bonePositionParent = parent_transform * glm::vec4(0, 0, 0, 1);
+                glm::vec4 bonePosition = global_transformation * glm::vec4(0, 0, 0, 1);
+
+                boneVertices->push_back(glm::vec3(bonePositionParent.x, bonePositionParent.y, bonePositionParent.z));
+                boneVertices->push_back(glm::vec3(bonePosition.x, bonePosition.y, bonePosition.z));
+            }
+        }
+
+        // Recursion to traverse all nodes
+        for (uint32_t i = 0; i < node->mNumChildren; i++)
+            TraverseNodeLI2(currentTime, node->mChildren[i], global_transformation, boneVertices, interpolationValue);
+    }
+
     // Cubic interpolation
     std::vector<glm::mat4> AnimateCI(double currentTime, std::vector<glm::vec3>* boneVertices)
     {
