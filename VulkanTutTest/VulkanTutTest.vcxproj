@@ -137,6 +137,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="GraphicsPipeline.cpp" />
     <ClCompile Include="Image.cpp" />
     <ClCompile Include="imgui\backends\imgui_impl_glfw.cpp" />
     <ClCompile Include="imgui\backends\imgui_impl_vulkan.cpp" />
@@ -146,6 +147,7 @@
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="MemoryOps.cpp" />
     <ClCompile Include="RenderPass.cpp" />
     <ClCompile Include="Swapchain.cpp" />
     <ClCompile Include="Timer.cpp" />
@@ -239,6 +241,7 @@
     <ClInclude Include="assimp-5.4.3\include\assimp\ZipArchiveIOSystem.h" />
     <ClInclude Include="Camera.hpp" />
     <ClInclude Include="CubicInterpolation.hpp" />
+    <ClInclude Include="GraphicsPipeline.hpp" />
     <ClInclude Include="GUI.hpp" />
     <ClInclude Include="Image.hpp" />
     <ClInclude Include="imgui\backends\imgui_impl_glfw.h" />
