@@ -835,6 +835,9 @@ private:
 
             gui.Render();
 
+            cam.UpdateVelocity(timer.GetData().DeltaTime);
+            cam.MoveCamera(timer.GetData().DeltaTime);
+
             DrawFrame();
         }
 
@@ -925,8 +928,8 @@ private:
         renderPassInfo.renderArea.extent = sc.extent;
 
         // Testing
-        VkImageCopy region{};
-        region.extent = { sc.extent.height, sc.extent.height, 1 };
+        /*VkImageCopy region{};
+        region.extent = { sc.extent.width, sc.extent.height, 1 };
         region.srcOffset = { 0, 0, 0 };
         region.dstOffset = { 0, 0, 0 };
 
@@ -937,18 +940,41 @@ private:
         region.srcSubresource.baseArrayLayer = 0;
         region.dstSubresource.baseArrayLayer = 0;
         region.srcSubresource.layerCount = 1;
+        region.dstSubresource.layerCount = 1;*/
+
+        VkImageBlit region{};
+
+        region.srcOffsets[0].x = 0;
+        region.srcOffsets[0].y = 0;
+        region.srcOffsets[0].z = 0;
+        region.dstOffsets[0].x = 0;
+        region.dstOffsets[0].y = 0;
+        region.dstOffsets[0].z = 0;
+        region.srcOffsets[1].x = sc.extent.width;
+        region.srcOffsets[1].y = sc.extent.height;
+        region.srcOffsets[1].z = 1;
+        region.dstOffsets[1].x = sc.extent.width;
+        region.dstOffsets[1].y = sc.extent.height;
+        region.dstOffsets[1].z = 1;
+        region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.srcSubresource.mipLevel = 0;
+        region.dstSubresource.mipLevel = 0;
+        region.srcSubresource.baseArrayLayer = 0;
+        region.dstSubresource.baseArrayLayer = 0;
+        region.srcSubresource.layerCount = 1;
         region.dstSubresource.layerCount = 1;
 
-        TransitionImageLayoutCmd(colorImage, 1, sc.format, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        TransitionImageLayoutCmd(sc.images[currentFrame], 1, sc.format, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             VK_IMAGE_ASPECT_COLOR_BIT, commandBuffers[currentFrame], 1);
 
         TransitionImageLayoutCmd(textureImages[1], 1, sc.format, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_ASPECT_COLOR_BIT, commandBuffers[currentFrame], 1);
 
-        vkCmdCopyImage(commandBuffers[currentFrame], colorImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            textureImages[1], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        vkCmdBlitImage(commandBuffers[currentFrame], sc.images[currentFrame], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            textureImages[1], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_NEAREST);
 
-        TransitionImageLayoutCmd(colorImage, 1, sc.format, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        TransitionImageLayoutCmd(sc.images[currentFrame], 1, sc.format, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_IMAGE_ASPECT_COLOR_BIT, commandBuffers[currentFrame], 1);
 
         TransitionImageLayoutCmd(textureImages[1], 1, sc.format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,

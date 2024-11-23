@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 #include <vector>
+#include <algorithm>
 
 // Camera Translation Directions
 enum Movement_Direction {
@@ -17,13 +18,14 @@ enum Movement_Direction {
 const float PITCH_CONSTRAINT = 89.0f;
 const float YAW = -90.0f;
 const float PITCH = 0.0f;
-const float SPEED = 10.0f;
+const float MAX_SPEED = 50.0f;
 const float SENSITIVITY = 0.1f;
 const float ARCBALL_SENSITIVITY = 5.0f;
 const float ARCBALL_MOVE_SENSITIVITY = 0.2f;
 const float FOV = 45.0f;
 const float Z_NEAR = 0.1f;
 const float Z_FAR = 100.0f;
+const float DRAG = 2.0f;
 const glm::vec3 FRONT = glm::vec3(0.0f, 0.0f, 1.0f);
 const glm::vec3 UP = glm::vec3(0.0f, 1.0f, 0.0f);
 
@@ -46,6 +48,7 @@ public:
 	float arcball_sensitivity;
 	float arcball_move_sensitivity;
 	float fov;
+	glm::vec3 velocity;
 	bool enabled;
 	bool arcball_mode;
 
@@ -65,6 +68,8 @@ public:
 	// Move Camera from Keyboard Input
 	void MoveCamera(Movement_Direction direction, float deltaTime);
 
+	void MoveCamera(float deltaTime);
+
 	// Move Camera from Mouse Scroll Input in Arcball Mode
 	void MoveArcballCamera(float y_offset, float deltaTime);
 
@@ -73,6 +78,8 @@ public:
 
 	// Rotate Camera from Mouse Movement, in an Arcball Fashion
 	void RotateArcballCamera(float x_offset, float y_offset, float screen_width, float screen_height, float deltaTime);
+
+	void UpdateVelocity(float deltaTime);
 
 private:
 	// Update Camera Vectors after Rotation (also after constructing)

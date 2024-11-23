@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-Camera::Camera(glm::vec3 start_position, float start_yaw, float start_pitch, glm::vec3 start_up) : front(FRONT), movement_speed(SPEED), look_sensitivity(SENSITIVITY), fov(FOV)
+Camera::Camera(glm::vec3 start_position, float start_yaw, float start_pitch, glm::vec3 start_up) : front(FRONT), movement_speed(MAX_SPEED), look_sensitivity(SENSITIVITY), fov(FOV)
 {
 	position = start_position;
 	yaw = start_yaw;
@@ -12,11 +12,12 @@ Camera::Camera(glm::vec3 start_position, float start_yaw, float start_pitch, glm
 	world_up = up;
 	enabled = true;
 	arcball_mode = false;
+	velocity = glm::vec3(0.0f);
 
 	UpdateCamera();
 }
 
-Camera::Camera(glm::vec3 start_position) : front(FRONT), movement_speed(SPEED), look_sensitivity(SENSITIVITY), fov(FOV), arcball_sensitivity(ARCBALL_SENSITIVITY), arcball_move_sensitivity(ARCBALL_MOVE_SENSITIVITY)
+Camera::Camera(glm::vec3 start_position) : front(FRONT), movement_speed(MAX_SPEED), look_sensitivity(SENSITIVITY), fov(FOV), arcball_sensitivity(ARCBALL_SENSITIVITY), arcball_move_sensitivity(ARCBALL_MOVE_SENSITIVITY)
 {
 	position = start_position;
 	yaw = YAW;
@@ -24,6 +25,7 @@ Camera::Camera(glm::vec3 start_position) : front(FRONT), movement_speed(SPEED), 
 	world_up = UP;
 	enabled = true;
 	arcball_mode = false;
+	velocity = glm::vec3(0.0f);
 
 	UpdateCamera();
 }
@@ -37,11 +39,14 @@ void Camera::MoveCamera(Movement_Direction direction, float deltaTime)
 {
 	// If camera is disabled, ignore
 	if (!enabled)
+	{
+		velocity = glm::vec3(0.0f);
 		return;
+	}
 
-	float smooth_speed = movement_speed * deltaTime;
+	//float smooth_speed = movement_speed * deltaTime;
 
-	if (direction == FWD)
+	/*if (direction == FWD)
 		position += front * smooth_speed;
 	else if (direction == AFT)
 		position -= front * smooth_speed;
@@ -52,7 +57,45 @@ void Camera::MoveCamera(Movement_Direction direction, float deltaTime)
 	else if (direction == UPWARD)
 		position += world_up * smooth_speed;
 	else if (direction == DOWNWARD)
-		position -= world_up * smooth_speed;
+		position -= world_up * smooth_speed;*/
+
+	if (direction == FWD)
+		velocity += front * movement_speed * deltaTime;
+	else if (direction == AFT)
+		velocity -= front * movement_speed * deltaTime;
+	else if (direction == LEFT)
+		velocity -= right * movement_speed * deltaTime;
+	else if (direction == RIGHT)
+		velocity += right * movement_speed * deltaTime;
+	else if (direction == UPWARD)
+		velocity += world_up * movement_speed * deltaTime;
+	else if (direction == DOWNWARD)
+		velocity -= world_up * movement_speed * deltaTime;
+}
+
+void Camera::MoveCamera(float deltaTime)
+{
+	// If camera is disabled, ignore
+	if (!enabled)
+	{
+		velocity = glm::vec3(0.0f);
+		return;
+	}
+
+	position += velocity * deltaTime;
+}
+
+void Camera::UpdateVelocity(float deltaTime)
+{
+	if (velocity.x == 0.0f && velocity.y == 0.0f && velocity.z == 0.0f)
+		return;
+
+	glm::vec3 dir = glm::normalize(velocity);
+	float magnitude = glm::length(velocity);
+
+	magnitude = std::clamp(magnitude - DRAG * deltaTime, 0.0f, MAX_SPEED);
+
+	velocity = dir * magnitude;
 }
 
 void Camera::MoveArcballCamera(float y_offset, float deltaTime)

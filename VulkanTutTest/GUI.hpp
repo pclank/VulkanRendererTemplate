@@ -60,7 +60,7 @@ struct GUI {
         ImGui::Text("Campos: %.2f, %.2f, %.2f", cam->position.x, cam->position.y, cam->position.z);
         ImGui::Checkbox("Arcball mode", &cam->arcball_mode);
         ImGui::SliderFloat("Camera sensitivity", &cam->look_sensitivity, 0.1f, 5.0f, "%.1f");
-        ImGui::SliderFloat("Camera speed", &cam->movement_speed, 0.1f, 15.0f, "%.1f");
+        ImGui::SliderFloat("Camera speed", &cam->movement_speed, 20.0f, MAX_SPEED, "%.1f");
         /*ImGui::Separator();
         ImGui::SliderFloat3("Suzanne translation", test_translation, -10.0f, 10.0f, "%.2f");
         ImGui::SliderFloat("Suzanne scale", &test_scale, 0.1f, 5.0f, "%.2f");

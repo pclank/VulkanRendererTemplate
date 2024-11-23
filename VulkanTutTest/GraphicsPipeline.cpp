@@ -193,6 +193,7 @@ GraphicsPipeline::GraphicsPipeline(VkDevice& device, Swapchain& swapChain, const
 
 GraphicsPipeline::GraphicsPipeline()
 {
+    device = NULL;
     pipeline = nullptr;
 }
 
