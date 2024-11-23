@@ -229,7 +229,7 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods); 
 void KeyboardCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
 // Class
-class HelloTriangleApplication {
+class Renderer {
 public:
     void Run()
     {
@@ -281,6 +281,11 @@ private:
     VkPipeline animatedNormalGraphicsPipeline;
     VkPipelineLayout uiPipelineLayout;
     VkPipeline uiPipeline;
+    
+    // Test Image
+    VkImage testImage;
+    VkDeviceMemory testMemory;
+    VkImageView testImageView;
 
     // Frame buffers
     std::vector<VkFramebuffer> swapChainFramebuffers;
@@ -695,7 +700,7 @@ private:
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
     {
-        auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+        auto app = reinterpret_cast<Renderer*>(glfwGetWindowUserPointer(window));
         app->framebufferResized = true;
     }
 
@@ -778,6 +783,7 @@ private:
         CreateDepthResources();
         CreateFramebuffers();
 #ifdef USE_ASSIMP
+        CreateTestImage();
         AddModel(2, true);
         AddModel(0, false, "models/suzanne.obj", "textures/marble.png", "textures/marble_normal.png");
         AddModel(2, true, "models/wicker_basket_02_2k.fbx", "models/textures/wicker_basket_02_diff_2k.jpg", "models/textures/wicker_basket_02_nor_dx_2k.png");
@@ -918,10 +924,35 @@ private:
         renderPassInfo.renderArea.offset = { 0, 0 };
         renderPassInfo.renderArea.extent = sc.extent;
 
-        /*std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = { {0.0f, 0.0f, 0.0f, 0.0f} };
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();*/
+        // Testing
+        VkImageCopy region{};
+        region.extent = { sc.extent.height, sc.extent.height, 1 };
+        region.srcOffset = { 0, 0, 0 };
+        region.dstOffset = { 0, 0, 0 };
+
+        region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.srcSubresource.mipLevel = 0;
+        region.dstSubresource.mipLevel = 0;
+        region.srcSubresource.baseArrayLayer = 0;
+        region.dstSubresource.baseArrayLayer = 0;
+        region.srcSubresource.layerCount = 1;
+        region.dstSubresource.layerCount = 1;
+
+        TransitionImageLayoutCmd(colorImage, 1, sc.format, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT, commandBuffers[currentFrame], 1);
+
+        TransitionImageLayoutCmd(textureImages[1], 1, sc.format, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT, commandBuffers[currentFrame], 1);
+
+        vkCmdCopyImage(commandBuffers[currentFrame], colorImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            textureImages[1], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        TransitionImageLayoutCmd(colorImage, 1, sc.format, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT, commandBuffers[currentFrame], 1);
+
+        TransitionImageLayoutCmd(textureImages[1], 1, sc.format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT, commandBuffers[currentFrame], 1);
 
         // Begin UI render pass
         vkCmdBeginRenderPass(commandBuffers[currentFrame], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -4704,6 +4735,14 @@ private:
             sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         }
+        else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
         else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
         {
             barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -4711,6 +4750,22 @@ private:
 
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         }
         else
             throw std::invalid_argument("unsupported layout transition!");
@@ -4867,8 +4922,11 @@ private:
     {
         VkFormat colorFormat = sc.format;
 
-        colorImageTmp = Image(device, physicalDevice, colorFormat, sc.extent.width, sc.extent.height, 1, msaaSamples,
+        /*colorImageTmp = Image(device, physicalDevice, colorFormat, sc.extent.width, sc.extent.height, 1, msaaSamples,
             VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_ASPECT_COLOR_BIT, "color resource");*/
+        colorImageTmp = Image(device, physicalDevice, colorFormat, sc.extent.width, sc.extent.height, 1, msaaSamples,
+            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_ASPECT_COLOR_BIT, "color resource");
 
         colorImage = colorImageTmp.image;
@@ -4877,6 +4935,16 @@ private:
 
         /*CreateImage(sc.extent.width, sc.extent.height, 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
         colorImageView = CreateImageView(colorImage, 1, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT);*/
+    }
+
+    void CreateTestImage()
+    {
+        VkFormat format = sc.format;
+
+        CreateImage(sc.extent.width, sc.extent.height, 1, msaaSamples, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, testImage, testMemory);
+        testImageView = CreateImageView(testImage, 1, format, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        //TransitionImageLayout(testImage, 1, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
@@ -4976,7 +5044,7 @@ private:
 
 int main()
 {    
-    HelloTriangleApplication app;
+    Renderer app;
 
     try {
         app.Run();

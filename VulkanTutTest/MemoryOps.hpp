@@ -56,8 +56,31 @@ static std::vector<char> ReadFile(const std::string& filename)
 }
 
 /// <summary>
+/// Returns whether the given format includes a stencil component
+/// </summary>
+/// <param name="format"></param>
+/// <returns></returns>
+inline bool HasStencilComponent(VkFormat format)
+{
+    return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
+}
+
+/// <summary>
 /// Creates a shader module from SPV code
 /// </summary>
 /// <param name="code"></param>
 /// <returns></returns>
 VkShaderModule CreateShaderModule(VkDevice& device, const std::vector<char>& code);
+
+/// <summary>
+/// Transitions image from a layout to another, as part of the current command buffer
+/// </summary>
+/// <param name="image"></param>
+/// <param name="mipLevels"></param>
+/// <param name="format"></param>
+/// <param name="oldLayout"></param>
+/// <param name="newLayout"></param>
+/// <param name="aspect"></param>
+/// <param name="layerCount"></param>
+void TransitionImageLayoutCmd(VkImage image, uint32_t mipLevels, VkFormat format,
+    VkImageLayout oldLayout, VkImageLayout newLayout, VkImageAspectFlags aspect, VkCommandBuffer commandBuffer, uint32_t layerCount = 1);
