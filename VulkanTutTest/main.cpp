@@ -928,21 +928,7 @@ private:
         renderPassInfo.renderArea.extent = sc.extent;
 
         // Testing
-        /*VkImageCopy region{};
-        region.extent = { sc.extent.width, sc.extent.height, 1 };
-        region.srcOffset = { 0, 0, 0 };
-        region.dstOffset = { 0, 0, 0 };
-
-        region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.srcSubresource.mipLevel = 0;
-        region.dstSubresource.mipLevel = 0;
-        region.srcSubresource.baseArrayLayer = 0;
-        region.dstSubresource.baseArrayLayer = 0;
-        region.srcSubresource.layerCount = 1;
-        region.dstSubresource.layerCount = 1;*/
-
-        VkImageBlit region{};
+        /*VkImageBlit region{};
 
         region.srcOffsets[0].x = 0;
         region.srcOffsets[0].y = 0;
@@ -978,7 +964,7 @@ private:
             VK_IMAGE_ASPECT_COLOR_BIT, commandBuffers[currentFrame], 1);
 
         TransitionImageLayoutCmd(textureImages[1], 1, sc.format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT, commandBuffers[currentFrame], 1);
+            VK_IMAGE_ASPECT_COLOR_BIT, commandBuffers[currentFrame], 1);*/
 
         // Begin UI render pass
         vkCmdBeginRenderPass(commandBuffers[currentFrame], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -1148,6 +1134,11 @@ private:
         vkDestroySampler(device, skyboxSampler, nullptr);
         vkDestroyImage(device, skyboxImage, nullptr);
         vkFreeMemory(device, skyboxImageMemory, nullptr);
+
+        // Test images
+        vkDestroyImageView(device, testImageView, nullptr);
+        vkDestroyImage(device, testImage, nullptr);
+        vkFreeMemory(device, testMemory, nullptr);
 
         for (size_t i = 0; i < descriptorPools.size(); i++)
             vkDestroyDescriptorPool(device, descriptorPools[i], nullptr);
@@ -4948,11 +4939,8 @@ private:
     {
         VkFormat colorFormat = sc.format;
 
-        /*colorImageTmp = Image(device, physicalDevice, colorFormat, sc.extent.width, sc.extent.height, 1, msaaSamples,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_ASPECT_COLOR_BIT, "color resource");*/
         colorImageTmp = Image(device, physicalDevice, colorFormat, sc.extent.width, sc.extent.height, 1, msaaSamples,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_ASPECT_COLOR_BIT, "color resource");
 
         colorImage = colorImageTmp.image;
