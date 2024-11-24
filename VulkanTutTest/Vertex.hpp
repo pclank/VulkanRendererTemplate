@@ -51,7 +51,13 @@ struct Vertex {
     bool operator==(const Vertex& other) const
     {
         // TODO: Extend!
-        return pos == other.pos && color == other.color && texCoord == other.texCoord && norm == other.norm;
+        return pos == other.pos && color == other.color && texCoord == other.texCoord && norm == other.norm &&
+            tangent == other.tangent && biTangent == other.biTangent;
+    }
+
+    bool operator!=(const Vertex& other) const
+    {
+        return !(*this == other);
     }
 
     static VkVertexInputBindingDescription GetBindingDescription()
