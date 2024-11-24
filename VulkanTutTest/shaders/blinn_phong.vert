@@ -28,6 +28,7 @@ void main()
     // fragColor = inBoneWeights.xyz;
     fragTexCoord = inTexCoord;
     // fragNorm = inNorm;
-    fragNorm = mat3(transpose(inverse(ubo.model))) * inNorm;
+    // fragNorm = mat3(transpose(inverse(ubo.model))) * inNorm;
+	fragNorm = mat3(transpose(inverse(ubo.model))) * inNorm;
     fragPos = inPos;
 }

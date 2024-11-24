@@ -8,62 +8,69 @@ RenderPass::RenderPass()
 RenderPass::RenderPass(VkDevice device, VkPipelineBindPoint bindPoint,
     const std::vector<VkFormat>& formats,
     const std::vector<VkSampleCountFlagBits>& samples,
-	const std::vector<VkAttachmentLoadOp>& loadOps,
-	const std::vector<VkAttachmentStoreOp>& storeOps,
-	const std::vector<VkImageLayout>& layouts, const std::string& name, VkRenderPass& renderPass)
+    const std::vector<VkAttachmentLoadOp>& loadOps,
+    const std::vector<VkAttachmentStoreOp>& storeOps,
+    const std::vector<VkImageLayout>& initialLayouts,
+	const std::vector<VkImageLayout>& finalLayouts,
+    const VkPipelineStageFlags dependencySrcStageMask,
+    const VkAccessFlags dependencySrcAccessMask,
+    const VkPipelineStageFlags dependencyDstStageMask,
+    const VkAccessFlags dependencyDstAccessMask,
+    const std::string& name,
+    VkRenderPass& renderPass)
 	:
 	device(device), name(name)
 {
     assert("all vector sizes must match!", formats.size() == samples.size() && formats.size() == loadOps.size() &&
-        formats.size() == storeOps.size() && formats.size() == layouts.size());
+        formats.size() == storeOps.size() && formats.size() == initialLayouts.size() && formats.size() == finalLayouts.size());
 
     // Color attachment
     VkAttachmentDescription colorAttachment{};
     colorAttachment.format = formats[0];
     colorAttachment.samples = samples[0];
 
-    /*colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;*/
     colorAttachment.loadOp = loadOps[0];
     colorAttachment.storeOp = storeOps[0];
 
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = layouts[0];
+    colorAttachment.initialLayout = initialLayouts[0];
+    colorAttachment.finalLayout = finalLayouts[0];
 
     // Depth attachment
     VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = formats[1];
-    depthAttachment.samples = samples[1];
+    if (formats.size() > 1)
+    {
+        depthAttachment.format = formats[1];
+        depthAttachment.samples = samples[1];
 
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-    /*depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;*/
-    depthAttachment.stencilLoadOp = loadOps[1];
-    depthAttachment.stencilStoreOp = storeOps[1];
+        depthAttachment.stencilLoadOp = loadOps[1];
+        depthAttachment.stencilStoreOp = storeOps[1];
 
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depthAttachment.finalLayout = layouts[1];
+        depthAttachment.initialLayout = initialLayouts[1];
+        depthAttachment.finalLayout = finalLayouts[1];
+    }
 
     // Color resolve attachments
     VkAttachmentDescription colorResolveAttachment{};
-    colorResolveAttachment.format = formats[2];
-    colorResolveAttachment.samples = samples[2];
+    if (formats.size() > 2)
+    {
+        colorResolveAttachment.format = formats[2];
+        colorResolveAttachment.samples = samples[2];
 
-    /*colorResolveAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorResolveAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;*/
-    colorResolveAttachment.loadOp = loadOps[2];
-    colorResolveAttachment.storeOp = storeOps[2];
+        colorResolveAttachment.loadOp = loadOps[2];
+        colorResolveAttachment.storeOp = storeOps[2];
 
-    colorResolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorResolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorResolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorResolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-    colorResolveAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorResolveAttachment.finalLayout = layouts[2];
+        colorResolveAttachment.initialLayout = initialLayouts[2];
+        colorResolveAttachment.finalLayout = finalLayouts[2];
+    }
 
     // Subpasses
     VkAttachmentReference colorAttachmentRef{};
@@ -82,14 +89,22 @@ RenderPass::RenderPass(VkDevice device, VkPipelineBindPoint bindPoint,
     subpass.pipelineBindPoint = bindPoint;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
-    subpass.pDepthStencilAttachment = &depthAttachmentRef;
-    subpass.pResolveAttachments = &colorResolveAttachmentRef;
+    if (formats.size() > 1)
+        subpass.pDepthStencilAttachment = &depthAttachmentRef;
+    if (formats.size() > 2)
+        subpass.pResolveAttachments = &colorResolveAttachmentRef;
 
-    std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorResolveAttachment };
+    std::array<VkAttachmentDescription, 2> attachments2 = { colorAttachment, depthAttachment };
+    std::array<VkAttachmentDescription, 3> attachments3 = { colorAttachment, depthAttachment, colorResolveAttachment };
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    renderPassInfo.pAttachments = attachments.data();
+    renderPassInfo.attachmentCount = static_cast<uint32_t>(formats.size());
+    if (formats.size() == 1)
+        renderPassInfo.pAttachments = &colorAttachment;
+    else if (formats.size() == 2)
+        renderPassInfo.pAttachments = attachments2.data();
+    else if (formats.size() == 3)
+        renderPassInfo.pAttachments = attachments3.data();
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
 
@@ -97,10 +112,10 @@ RenderPass::RenderPass(VkDevice device, VkPipelineBindPoint bindPoint,
     VkSubpassDependency dependency{};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependency.srcStageMask = dependencySrcStageMask;
+    dependency.srcAccessMask = dependencySrcAccessMask;
+    dependency.dstStageMask = dependencyDstStageMask;
+    dependency.dstAccessMask = dependencyDstAccessMask;
     renderPassInfo.dependencyCount = 1;
     renderPassInfo.pDependencies = &dependency;
 

@@ -17,6 +17,7 @@ struct GUI {
     std::vector<float> explosion_rates;
     float animated_scale = 1.0f;
     float animation_speed = 1.0f;
+    float animation_interpolation_value = 0.0f;
 	bool spacebar_down = false;
 	bool first_mouse_flag = true;
     bool wireframe_flag = false;
@@ -60,7 +61,7 @@ struct GUI {
         ImGui::Text("Campos: %.2f, %.2f, %.2f", cam->position.x, cam->position.y, cam->position.z);
         ImGui::Checkbox("Arcball mode", &cam->arcball_mode);
         ImGui::SliderFloat("Camera sensitivity", &cam->look_sensitivity, 0.1f, 5.0f, "%.1f");
-        ImGui::SliderFloat("Camera speed", &cam->movement_speed, 0.1f, 15.0f, "%.1f");
+        ImGui::SliderFloat("Camera speed", &cam->movement_speed, 20.0f, MAX_SPEED, "%.1f");
         /*ImGui::Separator();
         ImGui::SliderFloat3("Suzanne translation", test_translation, -10.0f, 10.0f, "%.2f");
         ImGui::SliderFloat("Suzanne scale", &test_scale, 0.1f, 5.0f, "%.2f");
@@ -75,6 +76,7 @@ struct GUI {
         ImGui::Checkbox("Draw normals", &normals_flag);
         ImGui::Separator();
         ImGui::SliderFloat("Animation speed", &animation_speed, 0.1f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Animation interpolation", &animation_interpolation_value, 0.0f, 1.0f, "%.2f");
         ImGui::Checkbox("Cubic interpolation", &cubic_interpolation_flag);
         ImGui::BeginGroup();
         if (ImGui::Button("Reset animation"))
@@ -91,12 +93,15 @@ struct GUI {
             const std::string strScale = std::string("Model ") + std::to_string(i) + " scaling";
             const std::string strExplodeFlag = std::string("Model ") + std::to_string(i) + " explode";
             const std::string strExplodeRate = std::string("Model ") + std::to_string(i) + " explode rate";
+            const std::string strAnim = std::string(" Model ") + std::to_string(i) + " current animation";
             ImGui::TextColored(ImVec4(1, 1, 0, 1), strIndex.c_str());
             ImGui::Checkbox(strEnabled.c_str(), &models[i].enabled);
             ImGui::SliderFloat3(strTranslation.c_str(), model_translations[i].data(), -10.0f, 10.0f, "%.2f");
             ImGui::SliderFloat(strScale.c_str(), &model_scales[i], 0.01f, 5.0f, "%.02f");
             ImGui::Checkbox(strExplodeFlag.c_str(), (bool*)&explode_flags[i]);
             ImGui::SliderFloat(strExplodeRate.c_str(), &explosion_rates[i], 0.0f, 10.0f, "%.1f");
+            if (models[i].meshes[0].animations.size() > 0)
+                ImGui::SliderInt(strAnim.c_str(), &models[i].currentAnim, 0, std::max(0, static_cast<int>(models[i].meshes[0].animations.size()) - 1));
         }
         ImGui::End();
 
