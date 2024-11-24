@@ -13,4 +13,5 @@ C:/VulkanSDK/1.3.290.0/Bin/glslc.exe normDisplay.frag -o normDisplay_frag.spv
 C:/VulkanSDK/1.3.290.0/Bin/glslc.exe linear_skinning_norm.vert -o linear_skinning_norm_vert.spv
 
 C:/VulkanSDK/1.3.290.0/Bin/glslc.exe normDisplay.geom -o normDisplay_geom.spv
+C:/VulkanSDK/1.3.290.0/Bin/glslc.exe simple.geom -o geom.spv
 pause

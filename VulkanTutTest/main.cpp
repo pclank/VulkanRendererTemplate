@@ -785,7 +785,7 @@ private:
 #ifdef USE_ASSIMP
         CreateTestImage();
         AddModel(2, true);
-        AddModel(0, false, "models/suzanne.obj", "textures/marble.png", "textures/marble_normal.png");
+        AddModel(2, true, "models/suzanne.obj", "textures/marble.png", "textures/marble_normal.png");
         AddModel(2, true, "models/wicker_basket_02_2k.fbx", "models/textures/wicker_basket_02_diff_2k.jpg", "models/textures/wicker_basket_02_nor_dx_2k.png");
         //AddModel(1, true, "models/flair_edited.fbx", "textures/body_diffuse.png", "textures/body_normal.png");
         AddModel(1, true, "models/Capoeira_working.fbx", "textures/brick.png", "textures/brick_normal.png");
