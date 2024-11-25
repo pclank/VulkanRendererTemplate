@@ -18,12 +18,14 @@ layout(location = 1) in VS_OUT {
     vec2 geomTexCoord;
     vec3 geomNorm;
     vec3 geomPos;
+	mat3 geomTBN;
 } gs_in[];
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
 layout(location = 2) out vec3 fragNorm;
 layout(location = 3) out vec3 fragPos;
+layout(location = 4) out mat3 fragTBN;
 
 vec3 GetNormal()
 {
@@ -48,16 +50,19 @@ void main()
         fragTexCoord = gs_in[0].geomTexCoord;
         fragNorm = gs_in[0].geomNorm;
         fragPos = gs_in[0].geomPos;
+		fragTBN = gs_in[0].geomTBN;
         EmitVertex();
         gl_Position = gl_in[1].gl_Position;
         fragTexCoord = gs_in[1].geomTexCoord;
         fragNorm = gs_in[1].geomNorm;
         fragPos = gs_in[1].geomPos;
+		fragTBN = gs_in[1].geomTBN;
         EmitVertex();
         gl_Position = gl_in[2].gl_Position;
         fragTexCoord = gs_in[2].geomTexCoord;
         fragNorm = gs_in[2].geomNorm;
         fragPos = gs_in[2].geomPos;
+		fragTBN = gs_in[2].geomTBN;
         EmitVertex();
         EndPrimitive();
 
@@ -70,16 +75,19 @@ void main()
     fragTexCoord = gs_in[0].geomTexCoord;
     fragNorm = gs_in[0].geomNorm;
     fragPos = gs_in[0].geomPos;
+	fragTBN = gs_in[0].geomTBN;
     EmitVertex();
     gl_Position = explode(gl_in[1].gl_Position, normal);
     fragTexCoord = gs_in[1].geomTexCoord;
     fragNorm = gs_in[1].geomNorm;
     fragPos = gs_in[1].geomPos;
+	fragTBN = gs_in[1].geomTBN;
     EmitVertex();
     gl_Position = explode(gl_in[2].gl_Position, normal);
     fragTexCoord = gs_in[2].geomTexCoord;
     fragNorm = gs_in[2].geomNorm;
     fragPos = gs_in[2].geomPos;
+	fragTBN = gs_in[2].geomTBN;
     EmitVertex();
     EndPrimitive();
 }

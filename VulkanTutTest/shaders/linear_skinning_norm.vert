@@ -19,6 +19,8 @@ layout(location = 2) in vec2 inTexCoord;
 layout(location = 3) in vec3 inNorm;
 layout(location = 4) in ivec4 inBoneIDs;        // Size of 4 is in accordance with the 4 bone per vertex convention
 layout(location = 5) in vec4 inBoneWeights;
+layout(location = 6) in vec3 inTangent;
+layout(location = 7) in vec3 inBiTangent;
 
 layout(location = 0) out VS_OUT {
     mat4 geomProj;
@@ -40,8 +42,13 @@ void main()
 
     // Calculate final normal direction
     vec4 newNormal = finalBoneTransform * vec4(inNorm, 0.0f);
-
-    // TODO: Tangent and Bitangent will also be affected by finalBoneTransform!
+	
+	vec4 newTangent = finalBoneTransform * vec4(inTangent, 0.0);
+	vec4 newBiTangent = finalBoneTransform * vec4(inBiTangent, 0.0);
+	vec3 T = normalize(vec3(ubo.model * newTangent));
+	vec3 B = normalize(vec3(ubo.model * newBiTangent));
+	vec3 N = normalize(vec3(ubo.model * newNormal));
+	mat3 TBN = mat3(T, B, N);
 
     // gl_Position = ubo.proj * ubo.view * ubo.model * newPosition;
     gl_Position = ubo.view * ubo.model * newPosition;

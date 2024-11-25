@@ -42,8 +42,8 @@ struct Vertex {
     glm::vec3 color;
     glm::vec2 texCoord;
     glm::vec3 norm;
-    glm::vec3 tangent;							// NOT USED YET ~~~ 
-    glm::vec3 biTangent;						// NOT USED YET ~~~
+    glm::vec3 tangent;
+    glm::vec3 biTangent;
     unsigned int bone_num = 0;					// Number of bones affecting the vertex. Used to add bone IDs and weights properly
     int boneIDs[MAXIMUM_BONES] = { 0 };			// Initialized to zeros
     float weights[MAXIMUM_BONES] = { 0.0f };	// Initialized to zeros
@@ -70,9 +70,9 @@ struct Vertex {
         return bindingDescription;
     }
 
-    static std::array<VkVertexInputAttributeDescription, 6> GetAttributeDescriptions()
+    static std::array<VkVertexInputAttributeDescription, 8> GetAttributeDescriptions()
     {
-        std::array<VkVertexInputAttributeDescription, 6> attributeDescriptions{};
+        std::array<VkVertexInputAttributeDescription, 8> attributeDescriptions{};
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
         attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -102,6 +102,16 @@ struct Vertex {
         attributeDescriptions[5].location = 5;
         attributeDescriptions[5].format = VK_FORMAT_R32G32B32A32_SFLOAT;
         attributeDescriptions[5].offset = offsetof(Vertex, weights);
+
+        attributeDescriptions[6].binding = 0;
+        attributeDescriptions[6].location = 6;
+        attributeDescriptions[6].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[6].offset = offsetof(Vertex, tangent);
+
+        attributeDescriptions[7].binding = 0;
+        attributeDescriptions[7].location = 7;
+        attributeDescriptions[7].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[7].offset = offsetof(Vertex, biTangent);
 
         return attributeDescriptions;
     }

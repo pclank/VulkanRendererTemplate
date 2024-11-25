@@ -3,6 +3,8 @@
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec3 fragNorm;
+layout(location = 3) in vec3 fragPos;
+layout(location = 4) in mat3 fragTBN;
 
 layout(binding = 1) uniform sampler2D texSampler;
 

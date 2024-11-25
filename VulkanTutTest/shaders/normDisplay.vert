@@ -15,6 +15,8 @@ layout(location = 2) in vec2 inTexCoord;
 layout(location = 3) in vec3 inNorm;
 layout(location = 4) in ivec4 inBoneIDs;        // Size of 4 is in accordance with the 4 bone per vertex convention
 layout(location = 5) in vec4 inBoneWeights;
+layout(location = 6) in vec3 inTangent;
+layout(location = 7) in vec3 inbiTangent;
 
 layout(location = 0) out VS_OUT {
     mat4 geomProj;
