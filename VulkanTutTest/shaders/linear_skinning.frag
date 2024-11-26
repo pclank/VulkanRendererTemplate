@@ -20,7 +20,9 @@ layout(location = 0) out vec4 outColor;
 
 vec3 GetNormalFromMap()
 {
-    vec3 tangentNormal = texture(normalSampler, fragTexCoord).xyz * 2.0 - 1.0;
+    // vec3 tangentNormal = texture(normalSampler, fragTexCoord).xyz * 2.0 - 1.0;
+	vec3 tangentNormal = texture(normalSampler, fragTexCoord).xyz;
+	tangentNormal.y *= -1.0;
 
     // vec3 Q1  = dFdx(fragPos);
     // vec3 Q2  = dFdy(fragPos);

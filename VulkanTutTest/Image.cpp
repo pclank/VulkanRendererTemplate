@@ -43,6 +43,8 @@ void Image::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkS
     if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
         throw std::runtime_error("failed to create image!");
 
+    this->image = image;
+
     // Allocate memory for image
     VkMemoryRequirements memRequirements;
     vkGetImageMemoryRequirements(device, image, &memRequirements);
@@ -56,6 +58,8 @@ void Image::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkS
         throw std::runtime_error("failed to allocate image memory!");
 
     vkBindImageMemory(device, image, imageMemory, 0);
+
+    this->imageMemory = imageMemory;
 }
 
 VkImageView Image::CreateImageView(VkImage image, uint32_t mipLevels, VkFormat format, VkImageAspectFlags aspectFlags,
@@ -75,6 +79,8 @@ VkImageView Image::CreateImageView(VkImage image, uint32_t mipLevels, VkFormat f
     VkImageView imageView;
     if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS)
         throw std::runtime_error("failed to create texture image view!");
+
+    this->imageView = imageView;
 
     return imageView;
 }

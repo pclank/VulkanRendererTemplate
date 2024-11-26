@@ -676,7 +676,7 @@ private:
         init_info.Instance = instance;
         init_info.PhysicalDevice = physicalDevice;
         init_info.Device = device;
-        init_info.QueueFamily = FindQueueFamilies(physicalDevice).graphicsFamily.value();
+        init_info.QueueFamily = FindQueueFamilies(physicalDevice, surface).graphicsFamily.value();
         init_info.Queue = graphicsQueue;
         init_info.PipelineCache = VK_NULL_HANDLE;
         init_info.DescriptorPool = imguiDescriptorPool;
@@ -690,9 +690,9 @@ private:
         init_info.Allocator = nullptr;
         ImGui_ImplVulkan_Init(&init_info);
 
-        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(imguiCommandPool);
+        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(device, imguiCommandPool);
         ImGui_ImplVulkan_CreateFontsTexture();
-        EndSingleTimeCommands(commandBuffer, imguiCommandPool, graphicsQueue);
+        EndSingleTimeCommands(device, commandBuffer, imguiCommandPool, graphicsQueue);
 
         /*for (uint32_t i = 0; i < descriptorSets.size(); i++)
             descriptorSets[i] = ImGui_ImplVulkan_AddTexture(textureSampler, colorImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);*/
@@ -1428,7 +1428,7 @@ private:
         VkPhysicalDeviceFeatures deviceFeatures;
         vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
 
-        QueueFamilyIndices queueIndices = FindQueueFamilies(device);
+        QueueFamilyIndices queueIndices = FindQueueFamilies(device, surface);
 
         bool extensionsSupported = CheckDeviceExtensionSupport(device);
 
@@ -1492,42 +1492,9 @@ private:
         return requiredExtensions.empty();
     }
 
-    QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device)
-    {
-        QueueFamilyIndices indices;
-        
-        uint32_t queueFamilyCount;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
-
-        int i = 0;
-        for (const auto& queueFamily : queueFamilies)
-        {
-            if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-                indices.graphicsFamily = i;
-
-            if (!(queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) && queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT)
-                indices.transferFamily = i;
-
-            VkBool32 presentSupport;
-            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
-            if (presentSupport)
-                indices.presentFamily = i;
-
-            if (indices.IsComplete())
-                break;
-
-            i++;
-        }
-
-        return indices;
-    }
-
     void CreateLogicalDevice()
     {
-        QueueFamilyIndices indices = FindQueueFamilies(physicalDevice);
+        QueueFamilyIndices indices = FindQueueFamilies(physicalDevice, surface);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
         std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value(), indices.transferFamily.value() };
@@ -1886,7 +1853,7 @@ private:
 
     void CreateCommandPools()
     {
-        QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(physicalDevice);
+        QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(physicalDevice, surface);
 
         // Graphics command pool
         VkCommandPoolCreateInfo poolInfo{};
@@ -1907,7 +1874,7 @@ private:
 
     void CreateImguiCommandPool()
     {
-        QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(physicalDevice);
+        QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(physicalDevice, surface);
 
         // IMGUI command pool
         VkCommandPoolCreateInfo poolInfo{};
@@ -2148,7 +2115,7 @@ private:
         //bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         bufferInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
 
-        QueueFamilyIndices indices = FindQueueFamilies(physicalDevice);
+        QueueFamilyIndices indices = FindQueueFamilies(physicalDevice, surface);
         uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.transferFamily.value() };
         bufferInfo.queueFamilyIndexCount = 2;
         bufferInfo.pQueueFamilyIndices = queueFamilyIndices;
@@ -2280,7 +2247,7 @@ private:
 
     void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize bufferSize)
     {
-        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(transCommandPool);
+        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(device, transCommandPool);
 
         VkBufferCopy copyRegion{};
         copyRegion.srcOffset = 0; // Optional
@@ -2288,7 +2255,7 @@ private:
         copyRegion.size = bufferSize;
         vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-        EndSingleTimeCommands(commandBuffer, transCommandPool, transferQueue);
+        EndSingleTimeCommands(device, commandBuffer, transCommandPool, transferQueue);
     }
 
     uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
@@ -3108,17 +3075,17 @@ private:
             normalImages.resize(normalImages.size() + 1);
             normalImageMemories.resize(normalImageMemories.size() + 1);
 
-            CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
+            CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SNORM, VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 normalImages[modelIndex], normalImageMemories[modelIndex]);
 
-            TransitionImageLayout(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+            TransitionImageLayout(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
-            CopyBufferToImage(stagingBuffer, normalImages[modelIndex], static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+            CopyBufferToImage(stagingBuffer, normalImages[modelIndex], device, commandPool, graphicsQueue, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
-            //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+            //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
-            GenerateMipmaps(normalImages[modelIndex], VK_FORMAT_R8G8B8A8_UNORM, texWidth, texHeight, mipLevels);
+            GenerateMipmaps(normalImages[modelIndex], VK_FORMAT_R8G8B8A8_SNORM, texWidth, texHeight, mipLevels);
         }
         else
         {
@@ -3131,7 +3098,7 @@ private:
 
             TransitionImageLayout(textureImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
-            CopyBufferToImage(stagingBuffer, textureImages[modelIndex], static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+            CopyBufferToImage(stagingBuffer, textureImages[modelIndex], device, commandPool, graphicsQueue, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
             //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
@@ -3230,7 +3197,7 @@ private:
 
         TransitionImageLayout(skyboxImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 6);
 
-        CopyBufferToImage(stagingBuffer, skyboxImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 6);
+        CopyBufferToImage(stagingBuffer, skyboxImage, device, commandPool, graphicsQueue, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 6);
 
         //TransitionImageLayout(skyboxImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
@@ -3328,7 +3295,7 @@ private:
         if ((!formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
             throw std::runtime_error("physical device does not support current mipmap generation or texture image format does not support linear blitting!");
 
-        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(commandPool);
+        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(device, commandPool);
 
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -3405,47 +3372,12 @@ private:
             0, nullptr,
             1, &barrier);
 
-        EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue);
-    }
-
-    VkCommandBuffer BeginSingleTimeCommands(VkCommandPool commandPool)
-    {
-        VkCommandBufferAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandPool = commandPool;
-        allocInfo.commandBufferCount = 1;
-
-        VkCommandBuffer commandBuffer;
-        vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
-
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-        vkBeginCommandBuffer(commandBuffer, &beginInfo);
-
-        return commandBuffer;
-    }
-
-    void EndSingleTimeCommands(VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkQueue queue)
-    {
-        vkEndCommandBuffer(commandBuffer);
-
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffer;
-
-        vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(queue);
-
-        vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+        EndSingleTimeCommands(device, commandBuffer, commandPool, graphicsQueue);
     }
 
     void TransitionImageLayout(VkImage image, uint32_t mipLevels, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, VkImageAspectFlags aspect, uint32_t layerCount = 1)
     {
-        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(commandPool);
+        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(device, commandPool);
 
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -3528,40 +3460,7 @@ private:
             1, &barrier
         );
 
-        EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue);
-    }
-
-    void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t layerCount = 1)
-    {
-        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(commandPool);
-
-        VkBufferImageCopy region{};
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = layerCount;
-
-        region.imageOffset = { 0, 0, 0 };
-        region.imageExtent = {
-            width,
-            height,
-            1
-        };
-
-        vkCmdCopyBufferToImage(
-            commandBuffer,
-            buffer,
-            image,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1,
-            &region
-        );
-
-        EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue);
+        EndSingleTimeCommands(device, commandBuffer, commandPool, graphicsQueue);
     }
 
     void CreateTextureImageView(const size_t modelIndex, bool isNormal = false)
@@ -3569,7 +3468,7 @@ private:
         if (isNormal)
         {
             normalImageViews.resize(normalImageViews.size() + 1);
-            normalImageViews[modelIndex] = CreateImageView(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
+            normalImageViews[modelIndex] = CreateImageView(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SNORM, VK_IMAGE_ASPECT_COLOR_BIT);
         }
         else
         {

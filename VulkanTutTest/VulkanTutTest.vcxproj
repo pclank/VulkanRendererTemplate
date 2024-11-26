@@ -150,6 +150,7 @@
     <ClCompile Include="MemoryOps.cpp" />
     <ClCompile Include="RenderPass.cpp" />
     <ClCompile Include="Swapchain.cpp" />
+    <ClCompile Include="Texture.cpp" />
     <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -254,9 +255,11 @@
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="MemoryOps.hpp" />
     <ClInclude Include="Model.hpp" />
+    <ClInclude Include="Paths.hpp" />
     <ClInclude Include="RenderPass.hpp" />
     <ClInclude Include="Skybox.hpp" />
     <ClInclude Include="Swapchain.hpp" />
+    <ClInclude Include="Texture.hpp" />
     <ClInclude Include="Timer.hpp" />
     <ClInclude Include="UtilStructs.hpp" />
     <ClInclude Include="Vertex.hpp" />
