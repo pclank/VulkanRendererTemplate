@@ -697,36 +697,21 @@ private:
         app->framebufferResized = true;
     }
 
-    std::vector<Texture> textures;
+    std::vector<Texture> diffuseTextures, normalTextures;
 
     void LoadTexture(const uint32_t modelIndex, const char* file = TEXTURE_PATH.c_str(), bool isNormal = false)
     {
-        Texture tex(device, physicalDevice, surface, commandPool, graphicsQueue, file, isNormal);
-        textures.push_back(tex);
-
         if (isNormal)
         {
-            normalImages.resize(normalImages.size() + 1);
-            normalImageViews.resize(normalImageViews.size() + 1);
-            normalImageMemories.resize(normalImageMemories.size() + 1);
-            normalSamplers.resize(normalSamplers.size() + 1);
-
-            normalImages.back() = textures.back().image.image;
-            normalImageViews.back() = textures.back().image.imageView;
-            normalImageMemories.back() = textures.back().image.imageMemory;
-            normalSamplers.back() = textures.back().sampler;
+            normalTextures.resize(normalTextures.size() + 1);
+            //normalTextures.back() = Texture(device, physicalDevice, surface, commandPool, graphicsQueue, file, isNormal);
+            normalTextures.back().Setup(device, physicalDevice, surface, commandPool, graphicsQueue, file, isNormal);
         }
         else
         {
-            textureImages.resize(textureImages.size() + 1);
-            textureImageViews.resize(textureImageViews.size() + 1);
-            textureImageMemories.resize(textureImageMemories.size() + 1);
-            textureSamplers.resize(textureSamplers.size() + 1);
-
-            textureImages.back() = textures.back().image.image;
-            textureImageViews.back() = textures.back().image.imageView;
-            textureImageMemories.back() = textures.back().image.imageMemory;
-            textureSamplers.back() = textures.back().sampler;
+            diffuseTextures.resize(diffuseTextures.size() + 1);
+            //diffuseTextures.back() = Texture(device, physicalDevice, surface, commandPool, graphicsQueue, file, isNormal);
+            diffuseTextures.back().Setup(device, physicalDevice, surface, commandPool, graphicsQueue, file, isNormal);
         }
 
         /*CreateTextureImage(modelIndex, file, isNormal);
@@ -1152,6 +1137,12 @@ private:
             vkDestroyImage(device, normalImages[i], nullptr);
             vkFreeMemory(device, normalImageMemories[i], nullptr);
         }
+
+        for (size_t i = 0; i < diffuseTextures.size(); i++)
+            diffuseTextures[i].Cleanup();
+
+        for (size_t i = 0; i < normalTextures.size(); i++)
+            normalTextures[i].Cleanup();
 
         vkDestroyImageView(device, skyboxImageView, nullptr);
         vkDestroySampler(device, skyboxSampler, nullptr);
@@ -2808,10 +2799,14 @@ private:
             bufferInfo.range = sizeof(UniformBufferObject);
 
             // Sampler
-            VkDescriptorImageInfo imageInfo{};
+            /*VkDescriptorImageInfo imageInfo{};
             imageInfo.sampler = textureSamplers[modelIndex];
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = textureImageViews[modelIndex];
+            imageInfo.imageView = textureImageViews[modelIndex];*/
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.sampler = diffuseTextures[modelIndex].sampler;
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imageInfo.imageView = diffuseTextures[modelIndex].image.imageView;
 
             VkDescriptorBufferInfo lightingBufferInfo{};
 
@@ -2824,10 +2819,14 @@ private:
                 lightingBufferInfo.range = sizeof(LightDataUBO);
 
                 // Normal map sampler
-                VkDescriptorImageInfo normalImageInfo{};
+                /*VkDescriptorImageInfo normalImageInfo{};
                 normalImageInfo.sampler = normalSamplers[modelIndex];
                 normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                normalImageInfo.imageView = normalImageViews[modelIndex];
+                normalImageInfo.imageView = normalImageViews[modelIndex];*/
+                VkDescriptorImageInfo normalImageInfo{};
+                normalImageInfo.sampler = normalTextures[modelIndex].sampler;
+                normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                normalImageInfo.imageView = normalTextures[modelIndex].image.imageView;
 
                 std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
                 descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

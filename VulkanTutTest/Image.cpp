@@ -9,7 +9,7 @@ Image::Image(VkDevice& device, VkPhysicalDevice physicalDevice, VkFormat format,
     usage(usage), properties(properties), aspectFlags(aspectFlags), viewType(viewType), name(name)
 {
     CreateImage(width, height, mipLevels, numSamples, format, tiling, usage, properties, image, imageMemory);
-    imageView = CreateImageView(image, mipLevels, format, aspectFlags, viewType, layerCount);
+    CreateImageView(mipLevels, format, aspectFlags, viewType, layerCount);
 
     std::cout << "Created image: " << name << std::endl;
 }
@@ -62,7 +62,7 @@ void Image::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkS
     this->imageMemory = imageMemory;
 }
 
-VkImageView Image::CreateImageView(VkImage image, uint32_t mipLevels, VkFormat format, VkImageAspectFlags aspectFlags,
+void Image::CreateImageView(uint32_t mipLevels, VkFormat format, VkImageAspectFlags aspectFlags,
     VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D, uint32_t layerCount = 1)
 {
     VkImageViewCreateInfo viewInfo{};
@@ -76,11 +76,6 @@ VkImageView Image::CreateImageView(VkImage image, uint32_t mipLevels, VkFormat f
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = layerCount;
 
-    VkImageView imageView;
     if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS)
         throw std::runtime_error("failed to create texture image view!");
-
-    this->imageView = imageView;
-
-    return imageView;
 }

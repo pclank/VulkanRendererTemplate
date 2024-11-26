@@ -11,8 +11,8 @@
 class Image {
 public:
 	VkImage image;
-	VkDeviceMemory imageMemory;
 	VkImageView imageView;
+	VkDeviceMemory imageMemory;
 
 	Image(VkDevice& device, VkPhysicalDevice physicalDevice, VkFormat format, uint32_t width, uint32_t height,
 		uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkImageTiling tiling, VkImageUsageFlags usage,
@@ -26,7 +26,7 @@ public:
 	void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples,
 		VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
 
-	VkImageView CreateImageView(VkImage image, uint32_t mipLevels, VkFormat format, VkImageAspectFlags aspectFlags,
+	void CreateImageView(uint32_t mipLevels, VkFormat format, VkImageAspectFlags aspectFlags,
 		VkImageViewType viewType, uint32_t layerCount);
 
 private:

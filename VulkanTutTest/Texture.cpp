@@ -3,6 +3,7 @@
 Texture::Texture(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkCommandPool commandPool, VkQueue graphicsQueue,
     const char* file, bool isNormal)
     :
+    device(device),
     isNormal(isNormal),
     file(file)
 {
@@ -17,6 +18,7 @@ Texture::Texture(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR 
 
     width = texWidth;
     height = texHeight;
+    nChannels = 4;
 
     // Staging buffer
     VkBuffer stagingBuffer;
@@ -55,7 +57,7 @@ Texture::Texture(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR 
     vkFreeMemory(device, stagingBufferMemory, nullptr);
 
     // Create ImageView
-    image.CreateImageView(image.image, mipLevels, format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D, 1);
+    image.CreateImageView(mipLevels, format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D, 1);
 
     // Create Sampler
     CreateTextureSampler(device, physicalDevice);
@@ -66,6 +68,66 @@ Texture::Texture()
 
 Texture::~Texture()
 {}
+
+void Texture::Setup(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkCommandPool commandPool, VkQueue graphicsQueue,
+    const char* file, bool isNormal)
+{
+    this->device = device;
+    this->isNormal = isNormal;
+    this->file = file;
+
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load(file, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    VkDeviceSize imageSize = texWidth * texHeight * 4;
+
+    mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight))) + 1);
+
+    if (!pixels)
+        throw std::runtime_error("failed to load texture image!");
+
+    width = texWidth;
+    height = texHeight;
+    nChannels = 4;
+
+    // Staging buffer
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+
+    CreateBuffer(device, physicalDevice, surface, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+    memcpy(data, pixels, static_cast<uint32_t>(imageSize));
+    vkUnmapMemory(device, stagingBufferMemory);
+
+    stbi_image_free(pixels);
+
+    const VkFormat format = (isNormal) ? VK_FORMAT_R8G8B8A8_SNORM : VK_FORMAT_R8G8B8A8_SRGB;
+
+    /*normalImages.resize(normalImages.size() + 1);
+        normalImageMemories.resize(normalImageMemories.size() + 1);*/
+
+    image = Image(device, physicalDevice, format, width, height, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT, file, VK_IMAGE_VIEW_TYPE_2D);
+
+    TransitionImageLayout(image.image, device, commandPool, graphicsQueue, mipLevels, format,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    CopyBufferToImage(stagingBuffer, image.image, device, commandPool, graphicsQueue, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+
+    //TransitionImageLayout(textureImage, mipLevels, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    GenerateMipmaps(image.image, format, texWidth, texHeight, mipLevels, device, physicalDevice, commandPool, graphicsQueue);
+
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+    vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+    // Create Sampler
+    CreateTextureSampler(device, physicalDevice);
+}
 
 void Texture::GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels,
     VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool, VkQueue graphicsQueue, uint32_t layerCount)
@@ -183,4 +245,12 @@ void Texture::CreateTextureSampler(VkDevice device, VkPhysicalDevice physicalDev
 
     if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS)
         throw std::runtime_error("failed to create sampler!");
+}
+
+void Texture::Cleanup()
+{
+    vkDestroyImageView(device, image.imageView, nullptr);
+    vkDestroySampler(device, sampler, nullptr);
+    vkDestroyImage(device, image.image, nullptr);
+    vkFreeMemory(device, image.imageMemory, nullptr);
 }

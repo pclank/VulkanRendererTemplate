@@ -22,6 +22,9 @@ public:
 
 	~Texture();
 
+	void Setup(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkCommandPool commandPool, VkQueue graphicsQueue,
+		const char* file, bool isNormal);
+
 	/// <summary>
 	/// Generate mipmaps for texture
 	/// </summary>
@@ -44,5 +47,13 @@ public:
 	/// <param name="device"></param>
 	/// <param name="physicalDevice"></param>
 	void CreateTextureSampler(VkDevice device, VkPhysicalDevice physicalDevice);
+
+	/// <summary>
+	/// Clean up memory etc
+	/// </summary>
+	void Cleanup();
+
+private:
+	VkDevice device;
 };
 
