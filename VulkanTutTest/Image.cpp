@@ -8,7 +8,7 @@ Image::Image(VkDevice& device, VkPhysicalDevice physicalDevice, VkFormat format,
     device(device), physicalDevice(physicalDevice), format(format), width(width), height(height), tiling(tiling),
     usage(usage), properties(properties), aspectFlags(aspectFlags), viewType(viewType), name(name)
 {
-    CreateImage(width, height, mipLevels, numSamples, format, tiling, usage, properties, image, imageMemory);
+    CreateImage(width, height, mipLevels, numSamples, format, tiling, usage, properties, image, imageMemory, layerCount);
     CreateImageView(mipLevels, format, aspectFlags, viewType, layerCount);
 
     std::cout << "Created image: " << name << std::endl;
@@ -21,7 +21,8 @@ Image::~Image()
 {}
 
 void Image::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples,
-    VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
+    VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties,
+    VkImage& image, VkDeviceMemory& imageMemory, uint32_t layerCount)
 {
     // Image creation
     VkImageCreateInfo imageInfo{};
@@ -31,14 +32,14 @@ void Image::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkS
     imageInfo.extent.height = static_cast<uint32_t>(height);
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = mipLevels;
-    imageInfo.arrayLayers = 1;
+    imageInfo.arrayLayers = layerCount;
     imageInfo.format = format;
     imageInfo.tiling = tiling;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = usage;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.samples = numSamples;
-    imageInfo.flags = 0; // Optional
+    imageInfo.flags = (layerCount == 6 ) ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
 
     if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
         throw std::runtime_error("failed to create image!");
@@ -63,7 +64,7 @@ void Image::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkS
 }
 
 void Image::CreateImageView(uint32_t mipLevels, VkFormat format, VkImageAspectFlags aspectFlags,
-    VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D, uint32_t layerCount = 1)
+    VkImageViewType viewType, uint32_t layerCount)
 {
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;

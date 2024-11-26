@@ -1,17 +1,8 @@
 #pragma once
 
-#include<vector>
-#include<string>
-
-// Used as postfixes for the image files
-const std::vector<std::string> postfixes = {
-    "right.jpg",    // +X
-    "left.jpg",     // -X
-    "top.jpg",      // +Y
-    "bottom.jpg",   // -Y
-    "front.jpg",    // +Z
-    "back.jpg"      // -Z
-};
+#include <vector>
+#include <string>
+#include <Paths.hpp>
 
 // The skybox vertices
 const float box_vertices[] = {

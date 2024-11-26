@@ -22,8 +22,31 @@ public:
 
 	~Texture();
 
+	/// <summary>
+	/// Set up simple image texture
+	/// </summary>
+	/// <param name="device"></param>
+	/// <param name="physicalDevice"></param>
+	/// <param name="surface"></param>
+	/// <param name="commandPool"></param>
+	/// <param name="graphicsQueue"></param>
+	/// <param name="file"></param>
+	/// <param name="isNormal"></param>
 	void Setup(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkCommandPool commandPool, VkQueue graphicsQueue,
 		const char* file, bool isNormal);
+
+	/// <summary>
+	/// Set up cubemap texture
+	/// </summary>
+	/// <param name="device"></param>
+	/// <param name="physicalDevice"></param>
+	/// <param name="surface"></param>
+	/// <param name="commandPool"></param>
+	/// <param name="graphicsQueue"></param>
+	/// <param name="folder"></param>
+	/// <param name="isNormal"></param>
+	void SetupCubemap(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkCommandPool commandPool, VkQueue graphicsQueue,
+		const char* folder, bool isNormal);
 
 	/// <summary>
 	/// Generate mipmaps for texture

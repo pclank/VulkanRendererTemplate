@@ -106,9 +106,6 @@ void Texture::Setup(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceK
 
     const VkFormat format = (isNormal) ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB;
 
-    /*normalImages.resize(normalImages.size() + 1);
-        normalImageMemories.resize(normalImageMemories.size() + 1);*/
-
     image = Image(device, physicalDevice, format, width, height, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         VK_IMAGE_ASPECT_COLOR_BIT, file, VK_IMAGE_VIEW_TYPE_2D);
@@ -121,6 +118,81 @@ void Texture::Setup(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceK
     //TransitionImageLayout(textureImage, mipLevels, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
     GenerateMipmaps(image.image, format, texWidth, texHeight, mipLevels, device, physicalDevice, commandPool, graphicsQueue);
+
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+    vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+    // Create Sampler
+    CreateTextureSampler(device, physicalDevice);
+}
+
+void Texture::SetupCubemap(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkCommandPool commandPool, VkQueue graphicsQueue,
+    const char* folder, bool isNormal)
+{
+    this->device = device;
+    this->isNormal = isNormal;
+    this->file = folder;
+
+    int texWidth, texHeight, texChannels;
+    std::vector<stbi_uc*> pixelVector;
+    for (uint32_t i = 0; i < 6; i++)
+    {
+        std::string fileName = folder + postfixes[i];
+        stbi_uc* pixels = stbi_load(fileName.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+        if (!pixels)
+            throw std::runtime_error("failed to load cubemap image!");
+
+        pixelVector.push_back(pixels);
+    }
+
+    width = texWidth;
+    height = texHeight;
+    nChannels = 4;
+
+    mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight))) + 1);
+
+    const VkDeviceSize layerSize = texWidth * texHeight * 4;        // Size of each layer
+    const VkDeviceSize imageSize = layerSize * 6;                   // Total size
+
+    // Silly solution
+    stbi_uc* fillPixels = (stbi_uc*)malloc(imageSize);
+    for (size_t i = 0; i < 6; i++)
+    {
+        for (size_t j = 0; j < static_cast<uint32_t>(layerSize); j++)
+            fillPixels[i * layerSize + j] = pixelVector[i][j];
+    }
+
+    // Staging buffer
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+
+    CreateBuffer(device, physicalDevice, surface, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+
+    memcpy(data, fillPixels, static_cast<uint32_t>(imageSize));
+
+    vkUnmapMemory(device, stagingBufferMemory);
+
+    for (uint32_t i = 0; i < pixelVector.size(); i++)
+        stbi_image_free(pixelVector[i]);
+
+    image = Image(device, physicalDevice, VK_FORMAT_R8G8B8A8_SRGB, width, height, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT, folder, VK_IMAGE_VIEW_TYPE_CUBE, 6);
+
+    TransitionImageLayout(image.image, device, commandPool, graphicsQueue, mipLevels, VK_FORMAT_R8G8B8A8_SRGB,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 6);
+
+    CopyBufferToImage(stagingBuffer, image.image, device, commandPool, graphicsQueue, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 6);
+
+    //TransitionImageLayout(skyboxImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    GenerateMipmaps(image.image, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels, device, physicalDevice, commandPool, graphicsQueue, 6);
 
     vkDestroyBuffer(device, stagingBuffer, nullptr);
     vkFreeMemory(device, stagingBufferMemory, nullptr);
