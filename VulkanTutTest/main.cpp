@@ -344,14 +344,7 @@ private:
     VkImageView textureImageView;
     VkSampler textureSampler;*/
     // Images
-    std::vector<VkImage> textureImages;
-    std::vector<VkDeviceMemory> textureImageMemories;
-    std::vector<VkImageView> textureImageViews;
-    std::vector<VkSampler> textureSamplers;
-    std::vector<VkImage> normalImages;
-    std::vector<VkDeviceMemory> normalImageMemories;
-    std::vector<VkImageView> normalImageViews;
-    std::vector<VkSampler> normalSamplers;
+    std::vector<Texture> diffuseTextures, normalTextures;
     VkImage depthImage;
     VkDeviceMemory depthMemory;
     VkImageView depthImageView;
@@ -697,8 +690,6 @@ private:
         app->framebufferResized = true;
     }
 
-    std::vector<Texture> diffuseTextures, normalTextures;
-
     void LoadTexture(const uint32_t modelIndex, const char* file = TEXTURE_PATH.c_str(), bool isNormal = false)
     {
         if (isNormal)
@@ -713,10 +704,6 @@ private:
             //diffuseTextures.back() = Texture(device, physicalDevice, surface, commandPool, graphicsQueue, file, isNormal);
             diffuseTextures.back().Setup(device, physicalDevice, surface, commandPool, graphicsQueue, file, isNormal);
         }
-
-        /*CreateTextureImage(modelIndex, file, isNormal);
-        CreateTextureImageView(modelIndex, isNormal);
-        CreateTextureSampler(modelIndex, isNormal);*/
     }
 
     void AddModel(const uint32_t pipelineIndex = 0, bool passLightingData = false, const char* modelFile = MODEL_PATH.c_str(), const char* diffuseTextureFile = TEXTURE_PATH.c_str(), const char* normalTextureFile = NORMAL_PATH.c_str())
@@ -1120,22 +1107,6 @@ private:
                 vkDestroyBuffer(device, lightingUniformBuffers[i][j], nullptr);
                 vkFreeMemory(device, lightingUniformBuffersMemory[i][j], nullptr);
             }
-        }
-
-        for (size_t i = 0; i < textureImages.size(); i++)
-        {
-            vkDestroyImageView(device, textureImageViews[i], nullptr);
-            vkDestroySampler(device, textureSamplers[i], nullptr);
-            vkDestroyImage(device, textureImages[i], nullptr);
-            vkFreeMemory(device, textureImageMemories[i], nullptr);
-        }
-
-        for (size_t i = 0; i < normalImages.size(); i++)
-        {
-            vkDestroyImageView(device, normalImageViews[i], nullptr);
-            vkDestroySampler(device, normalSamplers[i], nullptr);
-            vkDestroyImage(device, normalImages[i], nullptr);
-            vkFreeMemory(device, normalImageMemories[i], nullptr);
         }
 
         for (size_t i = 0; i < diffuseTextures.size(); i++)
@@ -3067,107 +3038,6 @@ private:
         }
     }
 
-    void CreateTextureImage(const size_t modelIndex, const char* file = TEXTURE_PATH.c_str(), bool isNormal = false)
-    {
-        int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(file, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-        VkDeviceSize imageSize = texWidth * texHeight * 4;
-
-        // TODO: Handle for multiple textures!
-        mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight))) + 1);
-
-        if (!pixels)
-            throw std::runtime_error("failed to load texture image!");
-
-        // Staging buffer
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-
-        CreateBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-        void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
-        memcpy(data, pixels, static_cast<uint32_t>(imageSize));
-        vkUnmapMemory(device, stagingBufferMemory);
-
-        stbi_image_free(pixels);
-
-        if (isNormal)
-        {
-            normalImages.resize(normalImages.size() + 1);
-            normalImageMemories.resize(normalImageMemories.size() + 1);
-
-            CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SNORM, VK_IMAGE_TILING_OPTIMAL,
-                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                normalImages[modelIndex], normalImageMemories[modelIndex]);
-
-            TransitionImageLayout(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
-
-            CopyBufferToImage(stagingBuffer, normalImages[modelIndex], device, commandPool, graphicsQueue, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-
-            //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
-
-            GenerateMipmaps(normalImages[modelIndex], VK_FORMAT_R8G8B8A8_SNORM, texWidth, texHeight, mipLevels);
-        }
-        else
-        {
-            textureImages.resize(textureImages.size() + 1);
-            textureImageMemories.resize(textureImageMemories.size() + 1);
-
-            CreateImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                textureImages[modelIndex], textureImageMemories[modelIndex]);
-
-            TransitionImageLayout(textureImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
-
-            CopyBufferToImage(stagingBuffer, textureImages[modelIndex], device, commandPool, graphicsQueue, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-
-            //TransitionImageLayout(textureImage, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
-
-            GenerateMipmaps(textureImages[modelIndex], VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
-        }
-
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
-    }
-
-    void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
-    {
-        // Image creation
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent.width = static_cast<uint32_t>(width);
-        imageInfo.extent.height = static_cast<uint32_t>(height);
-        imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = mipLevels;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = format;
-        imageInfo.tiling = tiling;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = usage;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.samples = numSamples;
-        imageInfo.flags = 0; // Optional
-
-        if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
-            throw std::runtime_error("failed to create image!");
-
-        // Allocate memory for image
-        VkMemoryRequirements memRequirements;
-        vkGetImageMemoryRequirements(device, image, &memRequirements);
-
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties);
-
-        if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS)
-            throw std::runtime_error("failed to allocate image memory!");
-
-        vkBindImageMemory(device, image, imageMemory, 0);
-    }
-
     void LoadCubemap(const char* folder = SKYBOX_PATH.c_str())
     {
         int texWidth, texHeight, texChannels;
@@ -3484,20 +3354,6 @@ private:
         EndSingleTimeCommands(device, commandBuffer, commandPool, graphicsQueue);
     }
 
-    void CreateTextureImageView(const size_t modelIndex, bool isNormal = false)
-    {
-        if (isNormal)
-        {
-            normalImageViews.resize(normalImageViews.size() + 1);
-            normalImageViews[modelIndex] = CreateImageView(normalImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SNORM, VK_IMAGE_ASPECT_COLOR_BIT);
-        }
-        else
-        {
-            textureImageViews.resize(textureImageViews.size() + 1);
-            textureImageViews[modelIndex] = CreateImageView(textureImages[modelIndex], mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-        }
-    }
-
     VkImageView CreateImageView(VkImage image, uint32_t mipLevels, VkFormat format, VkImageAspectFlags aspectFlags, VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D, uint32_t layerCount = 1)
     {
         VkImageViewCreateInfo viewInfo{};
@@ -3516,52 +3372,6 @@ private:
             throw std::runtime_error("failed to create texture image view!");
 
         return imageView;
-    }
-
-    void CreateTextureSampler(const size_t modelIndex, bool isNormal = false)
-    {
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-#ifdef TEX_SAMPLER_MODE_REPEAT
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-#else
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-#endif // TEX_SAMPLER_MODE_REPEAT
-        samplerInfo.anisotropyEnable = VK_TRUE;
-
-        VkPhysicalDeviceProperties properties{};
-        vkGetPhysicalDeviceProperties(physicalDevice, &properties);
-        std::cout << "Max Anisotropy is: " << properties.limits.maxSamplerAnisotropy << std::endl;
-        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = static_cast<float>(mipLevels);
-
-        if (isNormal)
-        {
-            normalSamplers.resize(normalSamplers.size() + 1);
-
-            if (vkCreateSampler(device, &samplerInfo, nullptr, &normalSamplers[modelIndex]) != VK_SUCCESS)
-                throw std::runtime_error("failed to create sampler!");
-        }
-        else
-        {
-            textureSamplers.resize(textureSamplers.size() + 1);
-
-            if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSamplers[modelIndex]) != VK_SUCCESS)
-                throw std::runtime_error("failed to create sampler!");
-        }
     }
     
     Image depthImageTmp;
@@ -3607,8 +3417,8 @@ private:
     {
         VkFormat format = sc.format;
 
-        CreateImage(sc.extent.width, sc.extent.height, 1, msaaSamples, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, testImage, testMemory);
-        testImageView = CreateImageView(testImage, 1, format, VK_IMAGE_ASPECT_COLOR_BIT);
+        /*CreateImage(sc.extent.width, sc.extent.height, 1, msaaSamples, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, testImage, testMemory);
+        testImageView = CreateImageView(testImage, 1, format, VK_IMAGE_ASPECT_COLOR_BIT);*/
 
         //TransitionImageLayout(testImage, 1, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT);
     }

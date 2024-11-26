@@ -35,7 +35,7 @@ Texture::Texture(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR 
 
     stbi_image_free(pixels);
 
-    const VkFormat format = (isNormal) ? VK_FORMAT_R8G8B8A8_SNORM : VK_FORMAT_R8G8B8A8_SRGB;
+    const VkFormat format = (isNormal) ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB;
 
     /*normalImages.resize(normalImages.size() + 1);
         normalImageMemories.resize(normalImageMemories.size() + 1);*/
@@ -104,7 +104,7 @@ void Texture::Setup(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceK
 
     stbi_image_free(pixels);
 
-    const VkFormat format = (isNormal) ? VK_FORMAT_R8G8B8A8_SNORM : VK_FORMAT_R8G8B8A8_SRGB;
+    const VkFormat format = (isNormal) ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB;
 
     /*normalImages.resize(normalImages.size() + 1);
         normalImageMemories.resize(normalImageMemories.size() + 1);*/
