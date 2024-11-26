@@ -26,7 +26,6 @@
 
 // STB Image loading
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
 
 // Tiny Obj Loader
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -62,6 +61,7 @@
 #include <Image.hpp>
 #include <Swapchain.hpp>
 #include <GraphicsPipeline.hpp>
+#include <Texture.hpp>
 
 // Macros
 #define REQUIRE_GEOM_SHADERS
@@ -82,13 +82,6 @@ const uint32_t HEIGHT = 1080;
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 #endif // HIGH_RES
-
-const std::string MODEL_PATH = "models/viking_room.obj";
-const std::string TEXTURE_PATH = "textures/viking_room.png";
-const std::string NORMAL_PATH = "textures/viking_room_normal.png";
-const std::string SKYBOX_PATH = "textures/skybox/";
-const std::string MODELS_FOLDER = "models/";
-const std::string TEXTURES_FOLDER = "textures/";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 const size_t MAX_BONES = 120;
@@ -704,11 +697,41 @@ private:
         app->framebufferResized = true;
     }
 
+    std::vector<Texture> textures;
+
     void LoadTexture(const uint32_t modelIndex, const char* file = TEXTURE_PATH.c_str(), bool isNormal = false)
     {
-        CreateTextureImage(modelIndex, file, isNormal);
+        Texture tex(device, physicalDevice, surface, commandPool, graphicsQueue, file, isNormal);
+        textures.push_back(tex);
+
+        if (isNormal)
+        {
+            normalImages.resize(normalImages.size() + 1);
+            normalImageViews.resize(normalImageViews.size() + 1);
+            normalImageMemories.resize(normalImageMemories.size() + 1);
+            normalSamplers.resize(normalSamplers.size() + 1);
+
+            normalImages.back() = textures.back().image.image;
+            normalImageViews.back() = textures.back().image.imageView;
+            normalImageMemories.back() = textures.back().image.imageMemory;
+            normalSamplers.back() = textures.back().sampler;
+        }
+        else
+        {
+            textureImages.resize(textureImages.size() + 1);
+            textureImageViews.resize(textureImageViews.size() + 1);
+            textureImageMemories.resize(textureImageMemories.size() + 1);
+            textureSamplers.resize(textureSamplers.size() + 1);
+
+            textureImages.back() = textures.back().image.image;
+            textureImageViews.back() = textures.back().image.imageView;
+            textureImageMemories.back() = textures.back().image.imageMemory;
+            textureSamplers.back() = textures.back().sampler;
+        }
+
+        /*CreateTextureImage(modelIndex, file, isNormal);
         CreateTextureImageView(modelIndex, isNormal);
-        CreateTextureSampler(modelIndex, isNormal);
+        CreateTextureSampler(modelIndex, isNormal);*/
     }
 
     void AddModel(const uint32_t pipelineIndex = 0, bool passLightingData = false, const char* modelFile = MODEL_PATH.c_str(), const char* diffuseTextureFile = TEXTURE_PATH.c_str(), const char* normalTextureFile = NORMAL_PATH.c_str())
@@ -3161,6 +3184,8 @@ private:
             pixelVector.push_back(pixels);
         }
 
+        mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight))) + 1);
+
         const VkDeviceSize layerSize = texWidth * texHeight * 4;        // Size of each layer
         const VkDeviceSize imageSize = layerSize * 6;                   // Total size
 
@@ -3181,9 +3206,6 @@ private:
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
 
-        //memcpy(data, pixelVector.data(), static_cast<uint32_t>(imageSize));
-        //for (uint32_t i = 0; i < pixelVector.size(); i++)
-        //    memcpy((void*)(reinterpret_cast<uint32_t>(data) + (layerSize * i)), pixelVector[i], static_cast<uint32_t>(layerSize));
         memcpy(data, fillPixels, static_cast<uint32_t>(imageSize));
 
         vkUnmapMemory(device, stagingBufferMemory);

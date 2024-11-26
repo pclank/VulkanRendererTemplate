@@ -1,7 +1,7 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
 #include <stb_image.h>
+#include <vulkan/vulkan.h>
 #include <Image.hpp>
 #include <Paths.hpp>
 #include <MemoryOps.hpp>

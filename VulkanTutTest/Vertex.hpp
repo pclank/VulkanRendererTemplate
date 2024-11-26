@@ -25,16 +25,6 @@ struct BoneInfo
 };
 
 /// <summary>
-/// Struct containing Texture information
-/// </summary>
-struct Texture
-{
-    unsigned int id;							// Texture ID
-    std::string type;							// Type of texture (diffuse, normal, specular, height)
-    std::string path;							// Expected path of texture
-};
-
-/// <summary>
 /// Struct containing Vertex information
 /// </summary>
 struct Vertex {
